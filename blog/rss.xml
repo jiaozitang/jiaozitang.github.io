@@ -1,0 +1,1708 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:content="http://purl.org/rss/1.0/modules/content/">
+    <channel>
+        <title>My Site Blog</title>
+        <link>https://jiaozitang.github.io/blog</link>
+        <description>My Site Blog</description>
+        <lastBuildDate>Thu, 06 Oct 2022 14:41:13 GMT</lastBuildDate>
+        <docs>https://validator.w3.org/feed/docs/rss2.html</docs>
+        <generator>https://github.com/jpmonette/feed</generator>
+        <item>
+            <title><![CDATA[2022.08.14-hooks]]></title>
+            <link>https://jiaozitang.github.io/blog/2022.08.14-hooks</link>
+            <guid>/2022.08.14-hooks</guid>
+            <pubDate>Thu, 06 Oct 2022 14:41:13 GMT</pubDate>
+            <description><![CDATA[携手创作，共同成长！这是我参与「掘金日新计划 · 8 月更文挑战」的第 1 天，点击查看活动详情]]></description>
+            <content:encoded><![CDATA[<p>携手创作，共同成长！这是我参与「掘金日新计划 · 8 月更文挑战」的第 1 天，<a href="https://juejin.cn/post/7123120819437322247" title="https://juejin.cn/post/7123120819437322247">点击查看活动详情</a></p><h2>背景</h2><p>现在有一个需求，是在更新
+Input 输入框时，搜索数据。</p><p>类似的功能图如下：</p><p><img src="https://p6-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/78145fcd2f03485b94132cc7dd2519e6~tplv-k3u1fbpfcp-watermark.image?" alt="image.png"/></p><p>通过 react useEffect，简单的 demo 实现如下：</p><pre><code class="language-js">import { Input } from &#x27;antd&#x27;
+import { useEffect, useState } from &#x27;react&#x27;
+import &#x27;./App.css&#x27;
+
+function App() {
+  const [val, setVal] = useState(&#x27;&#x27;)
+
+  const onSearch = (val) =&gt; {
+    console.log(&#x27;搜索&#x27;, val || &#x27;全部&#x27;)
+  }
+
+  // 当 val 发生变化时，请求搜索数据
+  useEffect(() =&gt; {
+    onSearch(val)
+  }, [val])
+
+  return (
+    &lt;div className=&#x27;App&#x27;&gt;
+      &lt;Input value={val} placeholder=&#x27;请输入&#x27; onChange={(e) =&gt; setVal(e.target.value)} allowClear /&gt;
+    &lt;/div&gt;
+  )
+}
+</code></pre><p>这时可以看到，首次进入页面，会发起 2 次查询全部的搜索数据请求，然后每次输入框更新，都会发起搜索数据的请求。</p><p><img src="https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/4f9e13517d1745c09fc31dc4fb1802a6~tplv-k3u1fbpfcp-watermark.image?" alt="image.png"/></p><p>为了优化性能，我们可以在搜索数据时，加入防抖的逻辑，只有当输入操作停顿指定时间后，才发起搜索数据的请求。</p><h2>lodash debounce + useCallback</h2><p>引入 lodash 的 <a href="https://www.lodashjs.com/docs/lodash.debounce#_debouncefunc-wait0-options">debounce</a> 方法。</p><p><code>lodash_.debounce(func, [wait=0], [options=])</code>创建一个 debounced（防抖动）函数，该函数会从上一次被调用后，延迟 <code>wait</code> 毫秒后调用 <code>func</code> 方法。</p><p>将 onSearch 方法用 lodash.debounce + useCallback 封装后，可以实现防抖效果。</p><pre><code class="language-js">const onSearch = useCallback(
+    debounce((val) =&gt; {
+      console.log(&#x27;搜索&#x27;, val || &#x27;全部&#x27;)
+    }, 500),
+    []
+  )
+</code></pre><p><img src="https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/b27578332c0143ce97ca4d79b295cc33~tplv-k3u1fbpfcp-watermark.image?" alt="image.png"/></p><h2>useDebounceFn</h2><p>将上述 lodash debounce + useCallback 封装为自定义 Hooks useDebounceFn，useDebounceFn 将返回一个有防抖效果的函数。</p><p><code>useDebounceFn(fn1, options)</code> 返回防抖 Hooks。</p><pre><code class="language-js">interface DebounceOptions {
+  wait?: number
+}
+
+const useDebounceFn = (fn: (...args: any) =&gt; any, options: DebounceOptions) =&gt; {
+  return useCallback(debounce(fn, options.wait), [])
+}
+
+const onSearch = useDebounceFn(
+    (val) =&gt; {
+      console.log(&#x27;搜索&#x27;, val || &#x27;全部&#x27;)
+    },
+    {
+      wait: 500,
+    }
+  )
+</code></pre><h2>useDebounce</h2><p>在 useDebounceFn 基础上，实现 useDebounce，返回一个具有防抖效果的 state。</p><p>创建一个新 state，setState 用 useDebounceFn 封装，<code>useDebounce(state, options)</code> 返回防抖 state。</p><pre><code class="language-js">function useDebounce&lt;T&gt;(value: T, options: DebounceOptions) {
+  const [debounced, setDebounced] = useState(value)
+
+  const update = useDebounceFn((value) =&gt; {
+    setDebounced(value)
+  }, options)
+
+  useEffect(() =&gt; {
+    update(value)
+  }, [value])
+
+  return debounced
+}
+</code></pre><p>将 useEffect 的依赖项改成 useDebounce 返回的 state，同样可以实现搜索防抖：</p><pre><code class="language-js">const debounceVal = useDebounce(val, { wait: 500 })
+const onSearch = (val: string) =&gt; {
+console.log(&#x27;搜索&#x27;, val || &#x27;全部&#x27;)
+}
+
+// 当 debounceVal 发生变化时，请求搜索数据
+useEffect(() =&gt; {
+onSearch(debounceVal)
+}, [debounceVal])
+</code></pre><h2>useDebounceEffect</h2><p>在 useDebounceFn 基础上，实现 useDebounceEffect，返回一个具有防抖效果的 useEffect。</p><p>创建一个新 state，setState 用 useDebounceFn 封装，依赖更新时防抖更新 state，新 state 更新时执行副作用，这时副作用就防抖执行了。</p><p><code>useDebounceEffect(effect, deps, options)</code> 返回防抖 useEffect。</p><pre><code class="language-js">function useDebounceEffect(effect: EffectCallback, deps: DependencyList, options: DebounceOptions) {
+  const [debounced, setDebounced] = useState({})
+
+  const update = useDebounceFn(() =&gt; {
+    setDebounced({})
+  }, options)
+
+  useEffect(() =&gt; {
+    update()
+  }, deps)
+
+  useEffect(effect, [debounced])
+}
+</code></pre><p>将 useEffect 改成 useDebounceEffect，就可以实现搜索防抖：</p><pre><code class="language-js">useDebounceEffect(
+    () =&gt; {
+      onSearch(val)
+    }
+    [val],
+    { wait: 500 }
+  )
+</code></pre><h2>小结</h2><p>本文实现了 useDebounceFn、useDebounce、useDebounceEffect 3 种防抖 Hooks，这 3 个 Hooks 可以直接下载 <a href="https://ahooks.js.org/zh-CN/hooks/use-debounce">ahooks</a> 使用。</p><h2>参考资料</h2><ul><li><a href="https://ahooks.js.org/zh-CN/hooks/use-debounce">ahooks 官网</a></li></ul>]]></content:encoded>
+        </item>
+        <item>
+            <title><![CDATA[2022.08.28-lerna]]></title>
+            <link>https://jiaozitang.github.io/blog/2022.08.28-lerna</link>
+            <guid>/2022.08.28-lerna</guid>
+            <pubDate>Thu, 06 Oct 2022 14:41:13 GMT</pubDate>
+            <description><![CDATA[携手创作，共同成长！这是我参与「掘金日新计划 · 8 月更文挑战」的第 2 天，点击查看活动详情]]></description>
+            <content:encoded><![CDATA[<p>携手创作，共同成长！这是我参与「掘金日新计划 · 8 月更文挑战」的第 2 天，点击<a href="https://juejin.cn/post/7123120819437322247">查看活动详情</a></p><h2>一、背景</h2><p>或许在开发多包的过程中，总会遇到多包的发布工作流问题，详细解释就是一个 npm 包，由多个 npm 相互依赖构成，发布 npm 包 1，对其有依赖的 npm 包 2 也要一同发布，那么怎么才能将这个发布工作流简单化呢？</p><p>实现在发布 npm 包 1 时，自动检测依赖 npm 包的其他包，并同时发布，更新版本。</p><p>答案大家都知晓，那便是使用多包管理工具 lerna。</p><p>但是 lerna 官方文档(<a href="https://www.lernajs.cn/">lerna 中文文档</a>)不齐全，学习成本甚高，本文欲打造一个最详细的 lerna 手册，帮助查阅指令，熟悉 lerna。</p><h2>二、lerna 介绍</h2><p>lerna 是一个优化使用 git 和 npm 管理多包存储库工作流的工具。</p><p>它具有以下功能：</p><ul><li>自动解决 packages 之间的依赖关系；</li><li>通过 git 检测文件改动，自动发布；</li><li>根据 git 提交记录，自动生成 CHANGELOG。</li></ul><h2>三、工作模式</h2><p>lerna 支持 2 种工作模式，分别是<strong>默认模式-Locked mode</strong>和<strong>Independent mode</strong>。</p><h3>默认模式-Locked mode</h3><p>每次发布，所有有改动的包自动更新版本号，所有包的版本一致，版本号维护在 lerna.json 的 version 中。</p><h3>Independent mode</h3><p>每次发布时，将提示每个已更改的包，以及其建议的版本号，每个 package 都有自己的版本号。</p><p>设置方式：</p><pre><code class="language-shell">lerna init --independent
+</code></pre><p>或修改 lerna.json：</p><pre><code class="language-shell">version: &quot;independent&quot;
+</code></pre><h2>四、常用指令</h2><h3>1. lerna init</h3><p>初始化一个 lerna 工程或者升级现有 lerna 项目到当前版本的 lerna。</p><pre><code class="language-shell">lerna init
+</code></pre><p>执行成功后，目录下将会生成这样的目录结构。</p><pre><code> - packages(目录)
+ - lerna.json(配置文件)
+ - package.json(工程描述文件)
+</code></pre><h3>2. lerna create</h3><p>创建一个 package，指定包名，可指定包位置。</p><pre><code class="language-shell">lerna create &lt; name &gt; [location]
+
+lerna create package1
+lerna create package1.1 packages/package1
+</code></pre><h3>3. lerna add</h3><p>为包添加依赖。</p><ul><li><code>--dev</code> devDependencies 替代 <code>dependencies</code></li><li><code>--exact</code> 安装准确版本，就是安装的包版本前面不带<code>^</code>, Eg: <code>&quot;^2.20.0&quot; ➜ &quot;2.20.0&quot;</code></li></ul><pre><code class="language-shell">lerna add lodash packages/module-1
+</code></pre><h3>4. lerna bootstrap</h3><p>将本地包链接在一起并安装其余的包依赖项。</p><pre><code class="language-shell">lerna bootstrap
+</code></pre><h3>5. lerna list</h3><p>列出所有的包。</p><pre><code class="language-shell">lerna list
+</code></pre><h3>6. lerna import</h3><p>导入本地已经存在的包。</p><pre><code class="language-shell">lerna import [npm 包所在路径]
+</code></pre><h3>7. lerna link</h3><p>项目包建立软链，类似 npm link。</p><pre><code class="language-shell">lerna link
+</code></pre><h3>8. lerna clean</h3><p>删除所有包的 node_modules 目录。</p><pre><code class="language-shell">lerna clean
+</code></pre><h3>9. lerna changed</h3><p>列出自上次更改后已更改的本地包。</p><pre><code class="language-shell">lerna changed
+</code></pre><h3>10. lerna publish</h3><p>发布包。</p><pre><code class="language-shell">lerna publish
+</code></pre><h3>11. lerna diff</h3><p>区分自上次发布以来的所有包或单个包</p><pre><code class="language-shell">lerna diff
+</code></pre><h3>12. lerna info</h3><p>打印有关本地环境的调试信息。</p><pre><code class="language-shell">lerna info
+</code></pre><h3>13. lerna run</h3><p>在包含该脚本的每个包中运行 npm 脚本。</p><pre><code class="language-shell">lerna run dev
+</code></pre><p>在包含该脚本的指定包中运行 npm 脚本。</p><pre><code class="language-shell">lerna run dev --scope=packageA
+</code></pre><h3>14. lerna version</h3><p>更新版本。</p><pre><code class="language-shell">lerna version
+</code></pre><h2>五、lerna + yarn workspaces 实践</h2><h3>1. 安装</h3><pre><code class="language-shell">npm install lerna -g
+</code></pre><h3>2. 创建项目</h3><pre><code class="language-shell">mkdir lerna-demo
+</code></pre><h3>3. 初始化项目</h3><pre><code class="language-shell">cd ./lerna-demo
+lerna init
+</code></pre><p>其中 package.json &amp; lerna.json 如下:</p><pre><code class="language-shell">// package.json
+{
+  &quot;name&quot;: &quot;root&quot;,
+  &quot;private&quot;: true, // 私有的，不会被发布，是管理整个项目，与要发布到npm的解耦
+  &quot;devDependencies&quot;: {
+    &quot;lerna&quot;: &quot;^4.0.0&quot;
+  }
+}
+
+// lerna.json
+{
+  &quot;packages&quot;: [
+    &quot;packages/*&quot;
+  ],
+  &quot;version&quot;: &quot;0.0.0&quot;
+}
+</code></pre><h3>4. 启用 yarn workspaces</h3><p>各个库之间存在依赖，如 A 依赖于 B，因此我们通常需要将 B link 到 A 的 node_module 里，一旦仓库很多的话，手动的管理这些 link 操作负担很大，因此需要自动化的 link 操作，按照拓扑排序将各个依赖进行 link。</p><p>启用 yarn workspaces 可以把所有的依赖提升到顶层的 node_modules 中，并且在 node_modules 中链接到本地的 package，自动的帮忙解决安装和 link 问题。</p><p>修改 package.json：</p><pre><code class="language-shell">{
+    &quot;private&quot;: true, // 只有私有项目可以开启
+    &quot;workspaces&quot;: [&quot;packages/*&quot;]
+}
+</code></pre><p>修改 lerna.json：</p><pre><code class="language-shell">{
+    &quot;useWorkspaces&quot;: true,
+    &quot;npmClient&quot;: &quot;yarn&quot;
+}
+</code></pre><h3>5. 添加 package</h3><pre><code class="language-shell">lerna create packageA
+lerna create packageB
+</code></pre><h3>6. 添加、删除、清除包依赖</h3><p>yarn workspaces 添加依赖：</p><pre><code class="language-shell"># 将packageA作为packageB的依赖进行安装：
+$ yarn workspace packageB add packageA
+# 给所有的package安装依赖:
+$ yarn workspaces add lodash
+# 给root 安装依赖：
+$ yarn add -W -D typescript
+</code></pre><p>yarn workspaces 删除依赖：</p><pre><code class="language-shell"># 删除packageB的依赖packageA：
+$ yarn workspace packageB remove packageA
+# 给所有的packages删除依赖:
+$ yarn workspaces remove lodash
+# 给root 删除依赖：
+$ yarn remove -W -D typescript
+</code></pre><p>yarn workspaces 安装全部依赖：</p><pre><code class="language-shell">yarn install
+</code></pre><p><code>yarn install</code> 等价于 <code>lerna bootstrap --npm-client yarn --use-workspaces</code>，把所有的依赖提升到顶层的 node_modules 中，并且在 node_modules 中链接到本地的 package，自动的帮忙解决安装和 link 问题。</p><p>yarn workspaces 清除 node_modules：</p><pre><code class="language-shell">yarn workspaces run clean
+</code></pre><h3>7. 项目构建</h3><p>构建所有包：</p><p>区别于普通项目之处在于各个 package 之间存在相互依赖，如 packageB 只有在 packageA 构建完之后才能进行构建，否则就会出错，这实际上要求我们以一种拓扑排序的规则进行构建。</p><p>lerna 支持按照拓扑排序规则执行命令, --sort 参数可以控制以拓扑排序规则执行命令。</p><pre><code class="language-shell"># 以拓扑排序规则在包含该脚本的每个包中运行 npm run dev 脚本。
+lerna run dev --stream --sort
+# 以拓扑排序规则在包含该脚本的每个包中运行 npm run build 脚本。
+lerna run build --stream --sort
+</code></pre><p>构建指定包：</p><pre><code class="language-shell"># 在 packageA 包中运行 npm run dev 脚本。
+lerna run dev --stream --scope=packageA
+# 在 packageA 包中运行 npm run build 脚本。
+lerna run build --stream --scope=packageA
+</code></pre><h3>8. 发布</h3><pre><code class="language-shell">lerna publish
+</code></pre><p>发布指令 lerna publish 内置以下步骤：</p><ul><li><p><strong>条件验证</strong>：包含验证测试是否通过，是否存在未提交的代码，是否在主分支上进行版本发布操作等等条件验证；</p></li><li><p><strong>version_bump</strong>：发版的时候需要更新版本号，这时候如何更新版本号就是个问题，一般大家都会遵循  semVer 语义；</p></li><li><p><strong>生成 changelog</strong>：为了方便查看每个 package 每个版本解决了哪些功能，我们需要给每个 package 都生成一份 changelog 方便用户查看各个版本的功能变化；</p></li><li><p><strong>生成 git tag</strong>：为了方便后续回滚问题及问题排查通常需要给每个版本创建一个 git tag；</p></li><li><p><strong>git 发布版本</strong>：每次发版我们都需要单独生成一个 commit 记录来标记 milestone；</p></li><li><p><strong>发布 npm 包</strong>：发布完 git 后我们还需要将更新的版本发布到 npm 上，以便外部用户使用。</p></li></ul><h2>小结</h2><p>本文从 5 个方面介绍了 lerna：</p><ul><li>背景</li><li>介绍</li><li>工作模式</li><li>常用指令</li><li>lerna + yarn workspaces 实践</li></ul><p>相信你已经很熟悉 lerna 的使用了，下方还列举了参考资料，可以自行扩展阅读。</p><p>希望能对你有所帮助，感谢阅读～</p><p>别忘了点个赞鼓励一下我哦，笔芯 ❤️</p><h2>参考资料</h2><ul><li><a href="https://juejin.cn/post/6844903568751722509">lerna 管理前端模块最佳实践</a></li><li><a href="https://juejin.cn/post/6844903856153821198">Lerna 中文教程详解</a></li><li><a href="https://www.lernajs.cn/">Lerna 中文官网</a></li><li><a href="https://segmentfault.com/a/1190000023954051">Lerna --多包存储管理工具（一）</a></li><li><a href="https://juejin.cn/post/7043998041786810398">One For All：基于 pnpm + lerna + typescript 的最佳项目实践 - 理论篇</a></li><li><a href="https://juejin.cn/post/6844903918279852046">lerna+yarn workspace+monorepo 项目的最佳实践</a></li><li><a href="https://juejin.cn/post/6847902224987717639">@lerna/run(翻译)</a></li></ul>]]></content:encoded>
+        </item>
+        <item>
+            <title><![CDATA[浅学一下 webpack5 module federation]]></title>
+            <link>https://jiaozitang.github.io/blog/2022.6.13-module-federation</link>
+            <guid>/2022.6.13-module-federation</guid>
+            <pubDate>Thu, 06 Oct 2022 14:41:13 GMT</pubDate>
+            <description><![CDATA[背景]]></description>
+            <content:encoded><![CDATA[<h2>背景</h2><p>在一个大中台项目中，怎么高效高性能的将多个子项目互相嵌入？</p><p>熟知的微前端解决方案有 micro-app、qiankun、webpack5 module federation 等等。</p><p>那 webpack5 module federation 是什么、如何使用、它的原理是什么呢？</p><p>本文将一一揭晓。</p><h2>module federation 是什么</h2><p>module federation 译为模块联邦，意思是模块可以在多个应用之间互相使用，应用 a 可以导出模块，也可以使用应用 b 导出的远程模块。</p><p>module federation 就是微前端的一种，而这种微前端和 micro-app、qiankun 等微前端框架确有本质的区别。</p><p>颗粒度的定义：</p><ul><li>module federation：多个互相独立的模块聚合；</li><li>qiankun：多个互相独立的应用聚合。</li></ul><p>技术实现：</p><ul><li>module federation：打包的 chunk 的聚合；</li><li>qiankun：打包的 main.js 的聚合。</li></ul><h2>如何使用</h2><p>在 webpack5 项目中新增 module federation plugin 配置。</p><p>配置项如下：</p><ul><li>name：应用名称，当作为 remote 引用时，路径为 name/expose；</li><li>library：声明全局变量的方式，name 为 umd 的 name；</li><li>filename：构建输出的文件名；</li><li>remotes：远程引用的应用名及其别名的映射，使用时以 key 值作为 name；</li><li>exposes：被远程引用时可暴露的资源路径及其别名；</li><li>shared：与其他应用之间可以共享的第三方依赖；<ul><li>requiredVersion: 依赖的版本；</li><li>singleton: 仅允许共享范围内的单个版本；</li><li>eager: 允许在初始块中使用这个共享模块。</li></ul></li></ul><p>项目 1 的配置：</p><pre><code class="language-js">new ModuleFederationPlugin({
+      name: &#x27;host&#x27;,
+      remotes: {
+        remote1: &#x27;remote1@[remote1Url]/remoteEntry.js&#x27;,
+        libs: &#x27;libs@[libsUrl]/remoteEntry.js&#x27;,
+      },
+    })
+</code></pre><p>项目 2 的配置：</p><pre><code class="language-js">new ModuleFederationPlugin({
+  name: &#x27;remote1&#x27;,
+  filename: &#x27;remoteEntry.js&#x27;,
+  exposes: {
+    &#x27;./Button&#x27;: &#x27;./src/Button&#x27;,
+  },
+  remotes: {
+    libs: &#x27;libs@[libsUrl]/remoteEntry.js&#x27;,
+  },
+})
+</code></pre><p>通过 module federation 实现了项目 1 的 Button 组件在项目 2 的聚合。</p><p>示例 demo 见：<a href="https://github.com/jiaozitang/mf-demo">https://github.com/jiaozitang/mf-demo</a>。</p><h2>原理</h2><p>module federation 远程模块 remotes 和共享模块 shared 都是异步 chunk，通过 import 动态引入，实现按需加载。</p><h2>小结</h2><p>module federation 的应用场景有限，因为它仅仅是模块的聚合，不具备应用之间的隔离性。</p><p>通常适用于多个应用依赖不同组件库的组件的场景。</p><p>这些组件库将组件通过 module federation 暴露，应用通过 module federation 引入远程组件。</p><h2>参考资料</h2><ul><li><a href="https://zhuanlan.zhihu.com/p/352936804">Module Federation 没有魔法仅仅是异步chunk</a></li><li><a href="https://www.cnblogs.com/breakdown/p/15336672.html">ModuleFederation-模块联邦</a></li><li><a href="https://webpack.docschina.org/concepts/module-federation/">https://webpack.docschina.org/concepts/module-federation/</a></li><li><a href="https://webpack.docschina.org/plugins/module-federation-plugin">https://webpack.docschina.org/plugins/module-federation-plugin</a></li></ul>]]></content:encoded>
+        </item>
+        <item>
+            <title><![CDATA[浅学一下 storybook]]></title>
+            <link>https://jiaozitang.github.io/blog/2022.06.24-storybook</link>
+            <guid>/2022.06.24-storybook</guid>
+            <pubDate>Thu, 06 Oct 2022 14:41:13 GMT</pubDate>
+            <description><![CDATA[什么是 storybook]]></description>
+            <content:encoded><![CDATA[<h2>什么是 storybook</h2><p><a href="https://storybook.js.org/docs/react/get-started/introduction/">storybook</a>是一个组件开发工具，它提供了完整的组件开发的生态环境，包括插件、用例、文档等等。</p><p>storybook 支持 react、vue、angular、web component 等主流前端 UI 框架。</p><h2>怎么用 storybook</h2><p>storybook 需要安装到已经设置了框架的项目中。</p><p>新建 react 应用</p><pre><code>npx create-react-app react-app
+</code></pre><p>初始化 storybook 配置</p><pre><code>npx storybook init
+</code></pre><p>启动 storybook</p><pre><code>npm run storybook
+</code></pre><p><img src="https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/f606359fdc834fa38fb9c84ac8f8fe98~tplv-k3u1fbpfcp-watermark.image?" alt="image.png"/></p><p>给组件写 story，一个 story 表示组件的一种状态。</p><p>story 的文件名约定为.stories.js。</p><pre><code>import React from &#x27;react&#x27;;
+
+import { Button } from &#x27;./Button&#x27;;
+
+export default {
+  title: &#x27;Button&#x27;, // 侧边栏导航名称
+  component: Button, // 组件地址
+};
+
+export const Primary = () =&gt; &lt;Button primary&gt;Button&lt;/Button&gt;;
+
+</code></pre><p>storybook 呈现的用例展示如下</p><p><img src="https://p9-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/620e0dc2ff2544b18560a8efcc506944~tplv-k3u1fbpfcp-watermark.image?" alt="image.png"/></p><p>storybook 附带了内置的工具栏：</p><ul><li>canvas：用于缩放组件、设置背景、设置尺寸及方向</li><li>docs：用于查看组件文档，从组件代码自动推断</li></ul><p><img src="https://p1-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/160e54ad953b4066aa6dbd8a3db86882~tplv-k3u1fbpfcp-watermark.image?" alt="image.png"/></p><p>storybook 附带了内置的插件：</p><ul><li>controls：支持动态修改组件参数</li><li>actions：验证交互是否通过回调产生正确的输出</li></ul><h2>参考资料</h2><ul><li><a href="https://storybook.js.org/docs/react/get-started/introduction/">storybook 官网</a></li><li><a href="https://juejin.cn/post/6862258700430606349">[Web 翻译]Storybook 6.0</a></li><li><a href="https://juejin.cn/post/6844903873602125838">StoryBook 实战</a></li></ul>]]></content:encoded>
+        </item>
+        <item>
+            <title><![CDATA[2022.07.30-devtools1]]></title>
+            <link>https://jiaozitang.github.io/blog/2022.07.30-devtools1</link>
+            <guid>/2022.07.30-devtools1</guid>
+            <pubDate>Thu, 06 Oct 2022 14:41:13 GMT</pubDate>
+            <description><![CDATA[本文分享一些不常见但很有用的JavaScript 调试技巧，能够有效提高浏览器开发工具的使用效率。]]></description>
+            <content:encoded><![CDATA[<blockquote><p>本文分享一些不常见但很有用的JavaScript 调试技巧，能够有效提高浏览器开发工具的使用效率。</p></blockquote><h2>一、元素面板</h2><p>首先介绍的是 Elements 面板。</p><p><img src="https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/248a4723f47f45fab794841b22ad6775~tplv-k3u1fbpfcp-zoom-1.image" alt="元素.png"/></p><h3>1. 重新排列元素的位置</h3><p>可以拖放元素以在位置上上下移动，可用于编辑/调试 HTML 结构。</p><p><img src="https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/baed937d71fc46ca8e9e32034b0a3975~tplv-k3u1fbpfcp-zoom-1.image" alt="dom_move.gif"/></p><h3>2. 在元素面板中引用节点</h3><p>可以通过 <code>$0</code> 调试元素面板选中的 DOM 节点。</p><blockquote><p>注意：如果你在你的项目中使用 jQuery，你可以使用<code>$($0)</code>jQuery API 来访问和应用这个元素。</p></blockquote><p><img src="https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/9776839a6f1c4acbb5c8b319f9de2ad2~tplv-k3u1fbpfcp-zoom-1.image" alt="参考元素.gif"/></p><h3>3. 用一个 DOM 节点做很多事情，比如截屏？</h3><p>可以在不退出调试器工具的情况下截取 DOM 节点的屏幕截图。</p><p>选择一个节点按下 <code>ctrl-shift-p</code>（Mac 快捷键），输入 <code>screen</code> 搜索截图功能，完成 DOM 节点的屏幕截图。</p><p><img src="https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/58a03aa60040442f99acf7b2c2a78c5b~tplv-k3u1fbpfcp-zoom-1.image" alt="截图.gif"/></p><blockquote><p>同时，按下 <code>ctrl-shift-p</code> 后还有很多功能可以使用，可以自行探索。</p></blockquote><h2>二、控制台面板</h2><p>接下来介绍的是 console 面板的使用技巧：</p><p><img src="https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/eac15ffa6be54cd0bea5310806c2e24b~tplv-k3u1fbpfcp-zoom-1.image" alt="cosnole.png"/></p><h3>1. 多行 console</h3><p>按住<code>shift-enter</code>以继续执行每一行，完成后，按<code>enter</code>键，可以实现多行日志。</p><p><img src="https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/310a18a94c9e4a60bcc8a6b2591c0185~tplv-k3u1fbpfcp-zoom-1.image" alt="多行控制台.gif"/></p><h3>2. 控制台日志格式化</h3><p>除了 <code>console.log(&#x27;Hi&#x27;)</code>，还有一些更有用的格式化版本：</p><ul><li>%s 将变量格式化为字符串；</li><li>%d 将变量格式化为整数；</li><li>%f 将变量格式化为浮点数；</li><li>%o 可用于打印 DOM 元素；</li><li>%O 用于打印对象表示；</li><li>%c 用于传递 CSS 来格式化字符串。</li></ul><p>在控制台面板中下列代码：</p><pre><code>console.log(
+  &#x27;%c I have %d %s&#x27;,
+  &#x27;color: green; background:black; font-size: 20pt&#x27;,
+  3,
+  &#x27;Bikes!&#x27;
+)
+</code></pre><p>输出如下：</p><p><img src="https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/e8788f2edd2b439082f90cfa6ef63aeb~tplv-k3u1fbpfcp-zoom-1.image" alt="格式控制台.png"/></p><h3>3. 存储为全局变量</h3><p>可以将 JSON 对象的任何部分保存为可在控制台面板中访问的全局变量：</p><p><img src="https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/921d432878774428bad600b5083546da~tplv-k3u1fbpfcp-zoom-1.image" alt="global_var_console.gif"/></p><h3>4. 控制台面板中的高级日志记录</h3><h4>4.1 console.dir</h4><pre><code class="language-js">console.log([&#x27;Apple&#x27;, &#x27;Orange]);
+</code></pre><p>输出：</p><p><img src="https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/3e9b295a0c10454eb97137ce5dda426f~tplv-k3u1fbpfcp-zoom-1.image" alt="高级日志1.png"/></p><pre><code class="language-js">console.dir([&#x27;Apple&#x27;, &#x27;Orange&#x27;])
+</code></pre><p>输出与上面几乎相同，但它明确表示类型为<code>Array</code>。</p><p><img src="https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/e867a004c63a4fd28aaea721ee9e5063~tplv-k3u1fbpfcp-zoom-1.image" alt="高级日志2.png"/></p><h4>4.2 console.table</h4><p>console.table 会在控制台中打印一个表格。</p><p>当您处理复杂的对象时，只需将其打印为 table 即可。</p><p>看看它的实际效果：</p><p><img src="https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/624acad3b0074a33b5b4f7ade00e75e1~tplv-k3u1fbpfcp-zoom-1.image" alt="控制台表.gif"/></p><h3>5.保存控制台日志</h3><p>只需选中图示复选框，即可在导航到其他页面时保留控制台中的日志：</p><p><img src="https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/1a688435122c41ab9b583e6331018493~tplv-k3u1fbpfcp-zoom-1.image" alt="保存日志.gif"/></p><h3>6. console.group</h3><p>有时，保持日志松散会导致调试延迟。</p><p>console.group 可以将所有日志组合在一起。</p><pre><code class="language-js">console.group(&#x27;Testing my calc function&#x27;);
+console.log(&#x27;adding 1 + 1 is&#x27;, 1 + 1);
+console.log(&#x27;adding 1 - 1 is&#x27;, 1 - 1);
+console.log(&#x27;adding 2 * 3 is&#x27;, 2 * 3);
+console.log(&#x27;adding 10 / 2 is&#x27;, 10 / 2);
+console.groupEnd();
+`
+</code></pre><p>输出是一个分组的日志：</p><p><img src="https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/17499251ce2b4dadaa8b491c998b4a5a~tplv-k3u1fbpfcp-zoom-1.image" alt="分组日志.png"/></p><h3>7. console.time</h3><p>console.time 可以测量执行一段代码需要多长时间。</p><pre><code class="language-js">function test time() {
+  var users= [
+    {
+      firstname: &quot;Tapas&quot;,
+      lastname: &quot;Adhikary&quot;,
+      hobby: &quot;Blogging&quot;
+    },
+    {
+      firstname: &quot;David&quot;,
+      lastname: &quot;Williams&quot;,
+      hobby: &quot;Chess&quot;
+    },
+    {
+      firstname: &quot;Brad&quot;,
+      lastname: &quot;Crets&quot;,
+      hobby: &quot;Swimming&quot;
+    },
+    {
+      firstname: &quot;James&quot;,
+      lastname: &quot;Bond&quot;,
+      hobby: &quot;Spying&quot;
+    },
+    {
+      firstname: &quot;Steve&quot;,
+      lastname: &quot;S&quot;,
+      hobby: &quot;Talking&quot;
+    }
+  ];
+
+  var getName = function (user) {
+    return user.lastname;
+  }
+
+  // Start the time which will be bound to the string &#x27;loopTime&#x27; 
+  console.time(&quot;loopTime&quot;);
+
+  for (let counter = 0; counter &lt; 1000 * 1000 * 1000; counter++) {
+    getName(users[counter &amp; 4]);
+  }
+
+  // End the time tick for &#x27;loopTime
+  console.timeEnd(&quot;loopTime&quot;);
+}
+</code></pre><p>从控制台面板或节点环境中运行上述代码后，您将获得如下输出，</p><pre><code>loopTime: 2234.032958984375ms
+</code></pre><p>这是计算十亿用户的姓氏所需的总时间（以毫秒为单位）。</p><h3>8. $_ 获取上一个的执行输出</h3><p><code>$_</code> 可以获取上一个的执行输出，作为输入提供给您的下一个执行逻辑。</p><p><img src="https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/250fb34985384f23a45b21965194bb75~tplv-k3u1fbpfcp-zoom-1.image" alt="last_ref.gif"/></p><h2>小结</h2><p>以上是我整理的一小部分 DevTools 使用技巧。</p><p>您可以从 <a href="https://developers.google.com/web/tools/chrome-devtools/">Google 的 Web 开发人员工具</a> 中找到完整使用文档。</p><h2>往期精彩</h2><ul><li><a href="https://juejin.cn/post/7126455415394713631/">一些有用的 JavaScript 调试技巧（二）</a></li></ul><hr/><p>本文翻译自 Tapas Adhikary 的原创文章。</p><ul><li>作者：Tapas Adhikary</li><li>译者：清汤饺子</li><li>原文链接：<a href="https://blog.greenroots.info/devtools-my-favorite-tips-and-tricks">https://blog.greenroots.info/devtools-my-favorite-tips-and-tricks</a></li></ul><hr/>]]></content:encoded>
+        </item>
+        <item>
+            <title><![CDATA[一些有用的 JavaScript 调试技巧]]></title>
+            <link>https://jiaozitang.github.io/blog/2022.07.31-devtools2</link>
+            <guid>/2022.07.31-devtools2</guid>
+            <pubDate>Thu, 06 Oct 2022 14:41:13 GMT</pubDate>
+            <description><![CDATA[---]]></description>
+            <content:encoded><![CDATA[<hr/><p>本文翻译自 Tapas Adhikary 的原创文章。</p><ul><li>作者：Tapas Adhikary</li><li>译者：清汤饺子</li><li>原文链接：<a href="https://blog.greenroots.info/the-definitive-guide-to-javascript-debugging-2021-edition">https://blog.greenroots.info/the-definitive-guide-to-javascript-debugging-2021-edition</a></li></ul><hr/><p>日常开发工作中，我们常用到 <code>console.log()</code> 调试 Javascript，使用 <code>console.log()</code> 需要不断的修改源码来调试，非常麻烦。</p><p>本文将介绍另一个可以高效调试 Javascript 的工具 -- 浏览器开发者工具（DevTools）。</p><p>下图是一个表单模块，当输出不符合期望时，怎么使用 DevTools 去调试，发现并解决问题呢？</p><p>下文将为你一一揭晓。</p><p>在线调试代码地址：<a href="https://greet-me-debugging.vercel.app">greet-me-debugging.vercel.app</a>。</p><p><img src="https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/3429d8ac59d54ac38bb933a767798919~tplv-k3u1fbpfcp-zoom-1.image" alt="1_app_error.png"/></p><h2>一、了解 Sources 面板</h2><p>DevTools 提供了许多不同的工具来执行调试任务，包括 DOM 检查、分析和网络调用检查。</p><p>首先介绍的是 Sources 面板，它可以帮助我们调试 JavaScript。</p><p>你可以通过按键 F12 或使用快捷键打开 DevTools：Control+Shift+I（Windows、Linux）或 Command+Option+I（Mac）。</p><p>单击 Sources 选项卡以导航到 Sources 面板。</p><p><img src="https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/94438b29ad0b4d0f8fe722c48e4e020e~tplv-k3u1fbpfcp-zoom-in-crop-mark:3024:0:0:0.awebp" alt="2_know_source.png图"/></p><p>该 Sources 面板具有三个主要部分。</p><p><img src="https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/45f9698c17d04713a2dc8798ceb86e23~tplv-k3u1fbpfcp-zoom-in-crop-mark:3024:0:0:0.awebp" alt="3_know_source_sections.png图"/></p><ol><li>文件导航区：页面请求的所有文件都在此处列出；</li><li>编辑区：当你从导航窗格中选择一个文件时，该文件的内容将在此处列出。我们也可以从这里编辑代码；</li><li>调试区： 你会发现这里有很多工具可以用来设置断点、检查变量值、观察变化等。</li></ol><p>如果你的 DevTools 窗口较宽或未停靠在单独的窗口中，则调试器部分将显示在代码编辑器窗格的右侧。</p><p><img src="https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/85f399a1ea944dfe8bc8b086dd3f76ab~tplv-k3u1fbpfcp-zoom-in-crop-mark:3024:0:0:0.awebp" alt="4_source_wide.png图"/></p><h2>二、设置断点</h2><p>要开始调试，首先要做的是设置断点。</p><p>断点是你希望代码执行暂停以便调试它的逻辑点。</p><p>DevTools 允许你以多种不同的方式设置断点。</p><p>主要包括以下 4 种方式：</p><ul><li>在代码行；</li><li>在条件语句中；</li><li>在 DOM 节点处；</li><li>在事件侦听器上。</li></ul><h3>1. 在代码行设置断点</h3><p>设置代码行断点：</p><ul><li>单击 Sources tab；</li><li>从文件导航区浏览源文件；</li><li>转到右侧代码编辑器区中的代码行；</li><li>单击行号列以在行上设置断点。</li></ul><p><img src="https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/20e6b022ab0e40f7ab791c14d09d2f17~tplv-k3u1fbpfcp-zoom-1.image" alt="5_line_of_code.png图"/></p><p>这里我们在第 6 行设置了一个断点，代码执行将在这里暂停。</p><h3>2. 设置条件断点</h3><p>设置条件断点：</p><ul><li>单击 Sources tab；</li><li>从文件导航区浏览源文件；</li><li>转到右侧代码编辑器区中的代码行；</li><li>右键单击行号并选择添加条件断点选项。</li></ul><p><img src="https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/1b59c088ec214ca2b87517b99a329790~tplv-k3u1fbpfcp-zoom-1.image" alt="6_add_conditional_1.png图"/></p><p>代码行下方会出现一个对话框，开始输入条件。</p><p><img src="https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/09e404950079425591a1e6acdfb23d99~tplv-k3u1fbpfcp-zoom-1.image" alt="&#x27;6_add_conditional_2.png图&#x27;"/></p><p>按 Enter 激活断点，你应该会看到一个橙色图标出现在行号列的顶部。</p><p><img src="https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/f61b52e690d946e39adad8db18e2dc23~tplv-k3u1fbpfcp-zoom-1.image" alt="6_add_conditional_3.png图"/></p><p><code>print()</code> 执行时，只要满足 <code>name === Joe</code> 条件，代码将暂停执行。</p><blockquote><p>提示：当你知道要调查的特定代码区域时，可以使用条件断点进一步检查以找到问题的根本原因。</p></blockquote><h3>3. 在事件监听器上设置断点</h3><p>在事件监听器上设置断点：</p><ul><li>单击 Sources tab；</li><li>展开 Event Listener Breakpoints；</li><li>从事件监听器列表选择 click 事件来设置断点。</li></ul><p><img src="https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/4c1cf2fa7330460a81ef7c3ff85ff432~tplv-k3u1fbpfcp-zoom-1.image" alt="8_Event_listener_breakpoint.png图"/></p><h3>4. 在 DOM 节点处设置断点</h3><p>DevTools 在 DOM 检查和调试方面同样强大。</p><p>当在 DOM 中添加、删除或更改某些内容时，你可以设置断点来暂停代码执行。</p><p>要在 DOM 更改上设置断点：</p><ul><li>单击 Elements 选项卡。</li><li>选择要设置断点的元素。</li><li>右键单击元素以获取上下文菜单。选择 Break on，然后选择 Subtree modifications、Attribute modifications、Node removal 其中一个。</li></ul><p><img src="https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/dcafbc6e19db4a9b85a3e7a1840d7c69~tplv-k3u1fbpfcp-zoom-1.image" alt="7_DOM_breakpoint.png图"/></p><p>如上图所示，我们在 div 节点的更改上设置了一个断点，条件是 Subtree 修改。</p><p>当问候消息被添加到输出 div 时，代码将暂停执行。</p><h2>三、逐步执行源代码</h2><p>现在我们知道了设置断点的所有重要方法，接下来让我们看看如何通过断点来解决问题。</p><p>调试器区提供了 5 个控件来逐步执行代码。</p><p><img src="https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/49b5c7fa722649b6b5956c4bae16c030~tplv-k3u1fbpfcp-zoom-1.image" alt="9_debug_controls.png图"/></p><h3>1. 下一步（快捷键 - F9）</h3><p>此选项使你能够在 JavaScript 代码执行时逐行执行。如果途中有函数调用，单步执行也会进入函数内部，逐行执行，然后退出。</p><p><img src="https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/0c0579e766b24aa8b8a80033845c396e~tplv-k3u1fbpfcp-zoom-1.image" alt="f9_step.gif图"/></p><h3>2. 跳过（快捷键 - F10）</h3><p>有时，你可能确定某些功能工作正常，不想花时间检查它们。此选项允许你在不单步执行功能的情况下执行该功能。</p><p>在下面的示例中，我们跳过了 <code>logger()</code> 函数的执行。</p><p><img src="https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/69d413fe302a4cbda61f2172a0f29e46~tplv-k3u1fbpfcp-zoom-1.image" alt="f10_step_over.gif图"/></p><h3>3. 进入（快捷键 - F11）</h3><p>单步执行时，你可能会感觉某个函数的行为异常并想要检查它。使用此选项可以更深入地研究函数。</p><p>在下面的示例中，我们正在单步执行函数 <code>logger()</code>。</p><p><img src="https://cdn.hashnode.com/res/hashnode/image/upload/v1609737142403/Q2JkTsv3W.gif?auto=format,compress&amp;gif-q=60&amp;format=webm" alt="F11_step_into.gif图"/></p><h3>4. 跳出（快捷键 – Shift + F11）</h3><p>在单步执行一个函数时，你可能不想继续并退出它。使用此选项可退出函数。</p><p>在下面的示例中，我们进入 <code>logger()</code> 函数内部，然后立即退出。</p><p><img src="https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/b35094bdaa0341f991b08cf35957af82~tplv-k3u1fbpfcp-zoom-1.image" alt="shift_F11_step_out.gif图"/></p><h3>5. 跳转（快捷键 - F8）</h3><p>有时，你可能希望从一个断点跳转到另一个断点，而无需在其间调试任何代码。使用此选项跳转到下一个断点。</p><p><img src="https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/8a46a71178c3404384b4219d152c865c~tplv-k3u1fbpfcp-zoom-1.image" alt="F8_run_jump.gif图"/></p><h3>6. 禁用和删除断点</h3><p>要一次禁用所有断点，请单击“停用断点”按钮（在下方圈出。）</p><p><img src="https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/314f773f0da54695bbeaea5ce45ef446~tplv-k3u1fbpfcp-zoom-1.image" alt="disable_bp.png图"/></p><p>请注意，上述方法不会删除断点。它只是在你需要的时间内停用它们。要激活breakpoints，请再次单击相同的按钮。</p><p>你可以通过取消选中复选框从“断点”面板中删除一个或多个断点。你可以通过右键单击并选择 Remove all breakpoints 选项来永久删除所有断点。</p><p><img src="https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/742f27438ff64ecfa63b24aa46d4392a~tplv-k3u1fbpfcp-zoom-1.image" alt="11_remove_all_bp.png图"/></p><h2>四、检查范围、调用堆栈和值</h2><p>当你逐行调试时，你可以检查变量的范围和值以及函数调用的调用堆栈。</p><h3>1. 范围</h3><p>你可以在 scope 选项中查看全局变量及 this 指向。</p><p><img src="https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/65007ee945084af0af6507d7ec658d97~tplv-k3u1fbpfcp-zoom-1.image" alt="9_scope.png图"/></p><h3>2. 调用堆栈</h3><p>调用堆栈面板有助于识别函数执行堆栈。</p><p><img src="https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/83830f17e4c0478fb4eb57edeb3ec9bd~tplv-k3u1fbpfcp-zoom-1.image" alt="9_call_stack.png图"/></p><h3>3. 值</h3><p>检查值是识别代码中的错误的主要方法。单步执行时，你只需将鼠标悬停在变量上即可检查值。</p><p>在下面的示例中，我们选择变量 name 以在代码执行阶段检查其值。</p><p><img src="https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/ab56728756ad47428d4c4639167a8d65~tplv-k3u1fbpfcp-zoom-1.image" alt="9_see_values.png图"/></p><p>此外，你可以选择代码的一部分作为表达式来检查值。在下面的示例中，我们选择了一个表达式 <code>document.getElementById(&#x27;m_wish&#x27;)</code> 来检查值。</p><p><img src="https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/f45373fb6554421783e0b6f76328112b~tplv-k3u1fbpfcp-zoom-1.image" alt="9_see_values_2.png图"/></p><h3>4. Watch</h3><p>Watch 选项使你能够添加一个或多个表达式并在执行时观察它们的值。当你想要在代码逻辑之外进行一些计算时，此功能非常有用。</p><p>你可以组合代码区域中的任何变量并形成有效的 JavaScript 表达式。在单步执行时，你将能够看到表达式的值。</p><p>以下是添加 Watch 所需的步骤：</p><ul><li>单击 Watch 部分上方的 + 图标</li></ul><p><img src="https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/e363035a894146c6872d0f028ef084a3~tplv-k3u1fbpfcp-zoom-1.image" alt="10_watch_1.png图"/></p><ul><li>添加要 Watch 的表达式。在这个例子中，我们添加了一个希望观察其值的变量。</li></ul><p><img src="https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/f7984a201b6b4a6894e62d6eb34ac219~tplv-k3u1fbpfcp-zoom-1.image" alt="10_watch_2.png图"/></p><p>另一种监听表达式的方法是在控制台里输入表达式。请参阅下面的示例以了解如何激活它。</p><p><img src="https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/be74841ef5014099ad8403dcef2c3154~tplv-k3u1fbpfcp-zoom-1.image" alt="10_watch_3.png图"/></p><h2>五、使用 Visual Studio Code 调试 JavaScript</h2><p>你最喜欢的代码编辑器是什么？就个人而言，我喜欢 Visual Studio 代码，因为它很简单。只需几个简单的步骤，我们就可以使用 VS Code 启用类似的调试环境。</p><h3>1. 用于调试的 VS Code 设置</h3><p>VS Code 支持安装插件来启用各种特性和功能。</p><p>要启用 JavaScript 调试，你需要安装一个名为 Debugger for Chrome 的插件。</p><p>你可以在 VS Code 的 Extensions 面板中搜索此扩展并安装它。</p><p><img src="https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/f4aa86cc6ebc4614b4ba5c6b7d80e40a~tplv-k3u1fbpfcp-zoom-1.image" alt="图像.png图"/></p><ul><li>安装后，单击左侧的 Run 选项并创建配置以运行/调试 JavaScript 应用程序。</li></ul><p><img src="https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/87dd5507368b44319e7a1ec826ad5b49~tplv-k3u1fbpfcp-zoom-1.image" alt="图像.png图"/></p><ul><li>将创建一个名为 launch.json 的文件，其中包含一些设置信息。它可能看起来像这样：</li></ul><pre><code class="language-js">{
+  // Use IntelliSense to learn about possible attributes.
+  // Hover to view descriptions of existing attributes.
+  // For more information, visit: &lt;https://go.microsoft.com/fwlink/?linkid=830387&gt;
+  &quot;version&quot;: &quot;0.2.0&quot;,
+  &quot;configurations&quot;: [
+      {
+          &quot;type&quot;: &quot;chrome&quot;,
+          &quot;request&quot;: &quot;launch&quot;,
+          &quot;name&quot;: &quot;Debug the Greet Me app&quot;,
+          &quot;url&quot;: &quot;&lt;http://localhost:5500&gt;&quot;,
+          &quot;webRoot&quot;: &quot;${workspaceFolder}&quot;
+      }
+  ]
+}
+</code></pre><p>你可能需要更改以下参数：</p><ol><li>name：项目名称。</li><li>url：项目在本地运行的 URL。</li><li>webRoot：默认值为 ${workspaceFolder}，即当前文件夹。你可能希望将其更改为 index.html 等文件所在的入口点文件夹。</li></ol><ul><li>最后一步是通过单击左上角的小播放图标开始调试。</li></ul><p><img src="https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/1915f9440d894791898b266c233158e4~tplv-k3u1fbpfcp-zoom-1.image" alt="图像.png图"/></p><h3>2. 了解调试器面板</h3><p>VS Code 提供了类似 DevTools 的工具来调试 JavaScript。你会发现与我们目前在本文中看到的 Google Chrome JavaScript 调试器有很多相似之处。</p><p>以下是你应该注意的主要部分：</p><ol><li>启用调试。按播放按钮启用调试选项。</li><li>用于单步执行断点以及暂停或停止调试的控件。这与我们在 Chrome DevTools 中看到的几乎相似，只是某些键盘快捷键可能有所不同。</li><li>在源代码上设置断点。这是相似的。</li><li>范围面板查看变量范围和值。这些在两种情况下都是完全一样的。</li><li>用于创建和监视表达式的监视面板。</li><li>执行函数的调用栈。</li><li>要启用、禁用和删除的断点列表。</li><li>调试控制台读取控制台日志消息。</li></ol><p><img src="https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/e72299ac177a49908cbcfc2fc0b8c255~tplv-k3u1fbpfcp-zoom-1.image" alt="vs_code_frame.png图"/></p><h3>3. 快速演示</h3><p>这是一个快速演示（1 分钟），展示了 VS Code 调试控件的用法：<a href="https://www.youtube.com/watch?v=xKkrKS77PIY">https://www.youtube.com/watch?v=xKkrKS77PIY</a>。</p><h2>总结</h2><p>总结一下：</p><ul><li>使用工具来调试 JavaScript 代码总是更好。像 Google ChromeDevTools 或 VS Code 调试器扩展这样的工具比仅仅依靠 console.log() 调试效率更高；</li><li>DevToolsSource Panel 非常强大，能够检查变量值、观察表达式、理解范围、读取调用堆栈等；</li><li>有几种设置方式断点，我们应该根据调试情况使用它们；</li><li>VS Code debugger 扩展程序功能非常强大。</li></ul><h2>往期精彩</h2><ul><li><a href="https://juejin.cn/post/7126050935746330654/">一些有用的 JavaScript 调试技巧（一）</a></li></ul>]]></content:encoded>
+        </item>
+        <item>
+            <title><![CDATA[Typescript 常用特性小结]]></title>
+            <link>https://jiaozitang.github.io/blog/2022/05/23/ts</link>
+            <guid>/2022/05/23/ts</guid>
+            <pubDate>Mon, 23 May 2022 00:00:00 GMT</pubDate>
+            <description><![CDATA[一、高级类型]]></description>
+            <content:encoded><![CDATA[<h2>一、高级类型</h2><h3>交叉类型</h3><p>交叉类型就是通过 &amp; 符号，将多个类型合并为一个类型。</p><pre><code class="language-js">interface I1 {
+  name: string;
+}
+
+interface I2 {
+  age: number;
+}
+
+type T3 = I1 &amp; I2
+
+const a: T3 = {
+  name: &#x27;tj&#x27;,
+  age: 11,
+}
+</code></pre><h3>联合类型</h3><p>联合类型就是通过 | 符号，表示一个值可以是几种类型之一。</p><pre><code class="language-js">const a: string | number = 1
+</code></pre><h3>字符串字面量类型</h3><p>字符串字面量类型就是使用一个字符串类型作为变量的类型。</p><pre><code class="language-js">const a: &#x27;number&#x27; = &#x27;number&#x27;
+</code></pre><h3>数字字面量类型</h3><p>数字字面量类型就是使用一个数字作为变量的类型。</p><pre><code class="language-js">const a: 1 = 1
+</code></pre><h3>布尔字面量类型</h3><p>数字字面量类型就是使用一个布尔值作为变量的类型。</p><pre><code class="language-js">const a: true = true
+</code></pre><h3>字符串模板类型</h3><p>字符串模板类型就是通过 ES6 的模板字符串语法，对类型进行约束。</p><pre><code class="language-js">type https = `https://${string}`
+const a:https = `https://jd.com`
+</code></pre><h2>二、操作符</h2><h3>keyof</h3><p>keyof 用于获取某种类型的所有键，其返回值是联合类型。</p><pre><code class="language-js">// const a: &#x27;name&#x27; | &#x27;age&#x27; = &#x27;name&#x27;
+const a: keyof {
+    name: string,
+    age: number
+} = &#x27;name&#x27;
+</code></pre><h3>typeof</h3><p>typeof 用于获取对象或者函数的结构类型。</p><pre><code class="language-js">const a2 = {
+  name: &#x27;tj&#x27;,
+}
+
+type T1 = typeof a2 // {name: string}
+
+function fn1(x: number): number {
+  return x * 10
+}
+
+type T2 = typeof fn1 // (x: number) =&gt; number
+</code></pre><h3>in</h3><p>in 用于遍历联合类型。</p><pre><code class="language-js">const obj = {
+    name: &#x27;tj&#x27;,
+    age: 11
+}
+
+type T5 = {
+    [P in keyof typeof obj]: any
+}
+
+/*
+{
+  name: any,
+  age: any
+}
+*/
+</code></pre><h3>T<!-- -->[K]</h3><p>T<!-- -->[K]<!-- --> 用于访问索引，得到索引对应的值的联合类型。</p><pre><code class="language-js">interface I3 {
+  name: string,
+  age: number
+}
+
+type T6 = I3[keyof I3] // string | number
+
+</code></pre><h2>三、运算符</h2><h3>非空断言运算符</h3><p>非空断言运算符 ! 用于强调元素是非 null 非 undefined，告诉 Typescript 该属性会被明确的赋值。</p><pre><code class="language-js">function Demo(): JSX.Element () {
+  const divRef = useRef&lt;HTMLDivElement&gt;()
+  useEffect(() =&gt; {
+    divRef.current!.scrollIntoView() // 断言divRef.current 是非 null 非 undefined
+  }, [])
+  return &lt;div ref={divRef}&gt;divDemo&lt;/div&gt;
+}
+</code></pre><h3>可选链运算符</h3><p>可选链运算符 ?. 用于判断左侧表达式的值是否是 null 或 undefined，如果是将停止表达式运行。</p><pre><code class="language-js">const a = b?.a
+</code></pre><h3>空值合并运算符</h3><p>空值合并运算符 ?? 用于判断左侧表达式的值是否是 null 或 undefined，如果不是返回右侧的值。</p><pre><code class="language-js">const a = b ?? 10
+</code></pre><h3>数字分隔符</h3><p>数字分隔符 <!-- -->_<!-- --> 用于对长数字进行分割，便于数字的阅读，编译结果将会自动去除 <!-- -->_<!-- -->。</p><pre><code class="language-js">const num: number = 1_111_111_111
+</code></pre><h2>四、类型别名</h2><p>类型别名用来给一个类型起个新名字。</p><pre><code class="language-js">type Message = string | string[]
+let greet = (message: Message) =&gt; {
+  // ...
+}
+</code></pre><h2>五、类型断言</h2><p>类型断言就是告诉浏览器我非常确定的类型。</p><pre><code class="language-js">// 尖括号 语法
+let someValue: any = &quot;this is a string&quot;;
+let strLength: number = (&lt;string&gt;someValue).length;
+
+// as 语法
+let someValue: any = &quot;this is a string&quot;;
+let strLength: number = (someValue as string).length;
+
+</code></pre><h2>七、类型守卫</h2><p>类型守卫就是一些表达式，它们会在运行时检查以确保在某个作用域里的类型。</p><pre><code class="language-js">interface A {
+  name: string;
+  age: number;
+}
+interface B {
+  sex: string;
+  home: string;
+}
+function doSomething(person: A | B): void {
+  if (person.name) {
+    // Error
+    // ...
+  }
+}
+// 使用 in 类型守卫
+function doSomething(person: A | B): void {
+  if (&#x27;name&#x27; in person) {
+    // OK
+    // ...
+  }
+}
+// 使用 typeof 类型守卫
+function A(a: string | number): string | number {
+  if (typeof a === &#x27;string&#x27;) {
+    // OK
+    return a + &#x27;&#x27;
+  }
+  if (typeof a === &#x27;number&#x27;) {
+    // OK
+    return a + 2
+  }
+  return &#x27;&#x27;
+}
+// instanceof类型守卫
+class Foo {}
+class Bar {}
+
+function test(input: Foo | Bar) {
+  if (input instanceof Foo) {
+    // 这里 input 的类型「收紧」为 Foo
+  } else {
+    // 这里 input 的类型「收紧」为 Bar
+  }
+}
+</code></pre><h2>八、泛型</h2><h3>1. 泛型介绍</h3><p>泛型就是通过给类型传参，得到一个更加通用的类型，就像给函数传参一样。</p><p>如下我们得到一个通用的泛型类型 T1，通过传参，可以得到 T2 类型 string[]、T3 类型 number[]：</p><pre><code class="language-js">type T1&lt;T&gt; = T[]
+
+type T2 = T1&lt;string&gt; // string[]
+
+type T3 = T1&lt;number&gt; // number[]
+</code></pre><p>如上 T 是变量，我们可以用任意其他变量名代替他。</p><pre><code class="language-js">type T4&lt;A&gt; = A[]
+
+type T5 = T4&lt;string&gt; // string[]
+
+type T6 = T4&lt;number&gt; // number[]
+</code></pre><h3>2. 命名规范</h3><p>在 Typescript 泛型变量的命名规范中，默认了 4 种常见的泛型变量名，为提高可读性，不建议改为其他的变量名来定义。</p><ul><li>T：表示第一个参数</li><li>K： 表示对象的键类型</li><li>V：表示对象的值类型</li><li>E：表示元素类型</li></ul><h3>3. 泛型接口</h3><p>泛型接口和上述示例类似，为接口类型传参：</p><pre><code class="language-js">interface I1&lt;T, U&gt; {
+  name: T;
+  age: U;
+}
+
+type I2 = I1&lt;string, number&gt;
+</code></pre><h3>4. 泛型约束(extends 操作符)</h3><p>有时候，我们需要对泛型参数进行约束，限制每个变量的类型。Typescript 通过 extends 实现类型约束。</p><p>泛型约束语法如下：</p><pre><code class="language-js">泛型名 extends 类型
+</code></pre><p>通过 T extends Length 约束了 T 的类型，必须是包含 length 属性，且 length 的类型必须是 number。</p><pre><code class="language-js">interface Length {
+    length: number
+}
+
+function fn1&lt;T extends Length&gt;(arg: T): number{
+    return arg.length
+}
+</code></pre><p>通过 extends 约束了 K 必须是 T 的 key。</p><pre><code class="language-js">function getProperty&lt;T, K extends keyof T&gt;(obj: T, key: K): T[K] {
+    return obj[key];
+}
+
+let tsInfo = {
+    name: &quot;Typescript&quot;,
+    supersetOf: &quot;Javascript&quot;,
+    difficulty: Difficulty.Intermediate
+}
+
+let difficulty: Difficulty =
+    getProperty(tsInfo, &#x27;difficulty&#x27;); // OK
+
+let supersetOf: string =
+    getProperty(tsInfo, &#x27;superset_of&#x27;); // Error
+
+</code></pre><h3>5. 泛型参数默认值</h3><p>泛型参数默认值，和函数参数默认值一样，在没有传参时，给定默认值。</p><pre><code class="language-js">interface I4&lt;T = string&gt; {
+  name: T;
+}
+
+const S1: I4 = { name: &#x27;123&#x27; } // 默认 name: string类型
+const S2: I4&lt;number&gt; = { name: 123 }
+</code></pre><h3>6. 泛型条件</h3><p>条件类型和 Js 的条件判断意思一样，都是指如果满足条件，就 xx，否则 xx。</p><p>条件类型表达式：</p><pre><code class="language-js">T extends U ? X : Y
+</code></pre><p>如果 T 能够赋值给 U，那么类型是 X，否则类型是 Y。</p><pre><code class="language-js">type T1&lt;T&gt; = T extends string ? &#x27;string&#x27; : &#x27;number&#x27;
+type T2 = T1&lt;string&gt; // &#x27;string&#x27;
+type T3 = T1&lt;number&gt; // &#x27;number
+</code></pre><h3>7. 泛型推断(infer 操作符)</h3><p>泛型推断的关键字是 infer，语法是 <code>infer 类型</code>。</p><p>一般是和泛型条件结合使用，结合实际例子理解：</p><p>如果泛型参数 T 能赋值给类型 <code>{t: infer Test}</code>，那么类型是推断类型 Test，否则类型是 string。</p><pre><code class="language-js">type Foo&lt;T&gt; = T extends {t: infer Test} ? Test : string
+</code></pre><ul><li>泛型参数 number 没有 t 属性，所以类型是 string</li></ul><pre><code class="language-js">type One = Foo&lt;number&gt; // string
+</code></pre><ul><li>泛型参数的 t 属性是 boolean，所以类型是推断类型 boolean</li></ul><pre><code class="language-js">type Two = Foo&lt;{ t: boolean }&gt; // boolean
+</code></pre><p>泛型参数的 t 属性是 () =&gt; void，所以类型是推断类型 () =&gt; void</p><pre><code class="language-js">type Three = Foo&lt;{ a: number, t: () =&gt; void }&gt; // () =&gt; void
+</code></pre><h3>8. 泛型工具类型</h3><h4>映射类型</h4><p>映射类型，它是一种泛型类型，可用于把原有的对象类型映射成新的对象类型。</p><p>常见的映射类型语法：</p><pre><code class="language-js">{ [ P in K ] : T }
+{ [ P in K ] ?: T }
+{ [ P in K ] -?: T }
+{ readonly [ P in K ] : T }
+{ readonly [ P in K ] ?: T }
+{ -readonly [ P in K ] ?: T }
+</code></pre><p>举例说明，通过映射类型将所有属性变为可选：</p><pre><code class="language-js">type Partial&lt;T&gt; = {
+  [P in keyof T]?: T[P]
+}
+</code></pre><h4>Partial</h4><p>Typescript 已将一些常用的映射类型进行封装，如 Partial 就是用于将泛型的全部属性变为可选。</p><pre><code class="language-js">type Partial&lt;T&gt; = {
+  [P in keyof T]?: T[P]
+}
+
+type T1 = Partial&lt;{
+  name: string,
+}&gt;
+
+const a: T1 = {} // 没有name属性也不会报错
+</code></pre><h4>Required</h4><p>Required 将泛型的所有属性变为必选。</p><pre><code class="language-js">type Required&lt;T&gt; = {
+  [P in keyof T]-?: T[P]
+}
+
+type T2 = Required&lt;{
+  name?: string,
+}&gt;
+
+const b: T2 = {} // ts报错，类型 &quot;{}&quot; 中缺少属性 &quot;name&quot;，但类型 &quot;Required&lt;{ name?: string | undefined; }&gt;&quot; 中需要该属性。ts(2741)
+</code></pre><blockquote><p>语法-?，是把?可选属性减去的意思</p></blockquote><h4>Readonly</h4><p>Readonly 将泛型的所有属性变为只读。</p><pre><code class="language-js">type T3 = Readonly&lt;{
+  name: string,
+}&gt;
+
+const c: T3 = {
+  name: &#x27;tj&#x27;,
+}
+
+c.name = &#x27;tj1&#x27; // ts 报错，无法分配到 &quot;name&quot; ，因为它是只读属性。ts(2540)
+</code></pre><h4>Pick</h4><p>Pick 从类型中选择一下属性，生成一个新类型。</p><pre><code class="language-js">type Pick&lt;T, K extends keyof T&gt; = {
+  [P in K]: T[P]
+}
+
+type T4 = Pick&lt;
+  {
+    name: string,
+    age: number,
+  },
+  &#x27;name&#x27;
+&gt;
+
+/*
+
+这是一个新类型，T4={name: string}
+
+*/
+
+const d: T4 = {
+  name: &#x27;tj&#x27;,
+}
+</code></pre><h4>Record</h4><p>Record 将 key 和 value 转化为 T 类型。</p><pre><code class="language-js">type Record&lt;K extends keyof any, T&gt; = {
+  [key in K]: T
+}
+
+const e: Record&lt;string, string&gt; = {
+  name: &#x27;tj&#x27;,
+}
+
+const f: Record&lt;string, number&gt; = {
+  age: 11,
+}
+</code></pre><blockquote><p>keyof any 对应的类型为 number | string | symbol，是可以做对象键的类型集合。</p></blockquote><h4>ReturnType</h4><p>ReturnType 获取 T 类型对应的返回值类型。</p><pre><code class="language-js">type ReturnType&lt;T extends (...args: any) =&gt; any&gt; = T extends (...args: any) =&gt; infer R ? R : any
+</code></pre><h4>Exclude</h4><p>Exclude 将某个类型中属于另一个的类型移除掉。</p><pre><code class="language-js">type Exclude&lt;T, U&gt; = T extends U ? never : T;
+
+type T0 = Exclude&lt;&quot;a&quot; | &quot;b&quot; | &quot;c&quot;, &quot;a&quot;&gt;; // &quot;b&quot; | &quot;c&quot;
+type T1 = Exclude&lt;&quot;a&quot; | &quot;b&quot; | &quot;c&quot;, &quot;a&quot; | &quot;b&quot;&gt;; // &quot;c&quot;
+type T2 = Exclude&lt;string | number | (() =&gt; void), Function&gt;; // string | number
+
+</code></pre><h4>Extract</h4><p>Extract 从 T 中提取出 U。</p><pre><code class="language-js">type Extract&lt;T, U&gt; = T extends U ? T : never;
+
+type T0 = Extract&lt;&quot;a&quot; | &quot;b&quot; | &quot;c&quot;, &quot;a&quot; | &quot;f&quot;&gt;; // &quot;a&quot;
+type T1 = Extract&lt;string | number | (() =&gt; void), Function&gt;; // () =&gt;void
+</code></pre><h4>Omit</h4><p>Omit 使用 T 类型中除了 K 类型的所有属性，来构造一个新的类型。</p><pre><code class="language-js">type Omit&lt;T, K extends keyof any&gt; = Pick&lt;T, Exclude&lt;keyof T, K&gt;&gt;;
+
+interface Todo {
+  title: string;
+  completed: boolean;
+  description: string;
+}
+
+type TodoPreview = Omit&lt;Todo, &quot;description&quot;&gt;;
+
+/*
+{
+  title: string;
+  completed: boolean;
+}
+*/
+</code></pre><h4>NonNullable</h4><p>NonNullable 用来过滤类型中的 null 及 undefined 类型。</p><pre><code class="language-js">type NonNullable&lt;T&gt; = T extends null | undefined ? never : T;
+
+type T0 = NonNullable&lt;string | number | undefined&gt;; // string | number
+type T1 = NonNullable&lt;string[] | null | undefined&gt;; // string[]
+</code></pre><h4>Parameters</h4><p>Parameters 用于获得函数的参数类型组成的元组类型。</p><pre><code class="language-js">type Parameters&lt;T extends (...args: any) =&gt; any&gt; = T extends (...args: infer P) =&gt; any
+? P : never;
+
+type A = Parameters&lt;() =&gt;void&gt;; // []
+type B = Parameters&lt;typeofArray.isArray&gt;; // [any]
+type C = Parameters&lt;typeofparseInt&gt;; // [string, (number | undefined)?]
+type D = Parameters&lt;typeofMath.max&gt;; // number[]
+</code></pre><h2>参考资料</h2><ul><li><p><a href="https://juejin.cn/post/7018805943710253086">2021 typescript 史上最强学习入门文章(2w 字)</a></p></li><li><p><a href="https://juejin.cn/post/6926794697553739784">TypeScript 高级用法</a></p></li><li><p><a href="https://juejin.cn/post/7003171767560716302#heading-70">重学 TypeScript</a></p></li><li><p><a href="https://www.tslang.cn/docs/handbook/advanced-types.html">Typescript 官网</a></p></li><li><p><a href="https://juejin.cn/post/6844904184894980104#heading-2">一文读懂 TypeScript 泛型及应用（ 7.8K 字）</a></p></li></ul>]]></content:encoded>
+        </item>
+        <item>
+            <title><![CDATA[JavaScript 函数式编程-入门篇]]></title>
+            <link>https://jiaozitang.github.io/blog/2022/03/12/function-code</link>
+            <guid>/2022/03/12/function-code</guid>
+            <pubDate>Sat, 12 Mar 2022 19:11:14 GMT</pubDate>
+            <description><![CDATA[本文将从什么是函数式编程、函数式编程的特点、如何使用函数式编程等 3 个方面带你入门 Javascript 函数式编程。]]></description>
+            <content:encoded><![CDATA[<p><img src="https://img14.360buyimg.com/ling/jfs/t1/211906/13/12376/431721/6208fae4E49caa61b/7f286fcdbf89fd66.jpg"/></p><p>本文将从什么是函数式编程、函数式编程的特点、如何使用函数式编程等 3 个方面带你入门 Javascript 函数式编程。</p><h2>一、什么是函数式编程</h2><p>先来一个官方的解释：</p><blockquote><p><strong>函数式编程</strong>，是一种<a href="https://zh.wikipedia.org/wiki/%E7%BC%96%E7%A8%8B%E8%8C%83%E5%BC%8F">编程范式</a>，它将<a href="https://zh.wikipedia.org/wiki/%E9%9B%BB%E8%85%A6%E9%81%8B%E7%AE%97">电脑运算</a>视为<a href="https://zh.wikipedia.org/wiki/%E5%87%BD%E6%95%B0">函数</a>运算，并且避免使用程序<a href="https://zh.wikipedia.org/w/index.php?title=%E7%8A%B6%E6%80%81_(%E8%AE%A1%E7%AE%97%E6%9C%BA%E7%A7%91%E5%AD%A6)&amp;action=edit&amp;redlink=1">状态</a>以及<a href="https://zh.wikipedia.org/wiki/%E4%B8%8D%E5%8F%AF%E8%AE%8A%E7%89%A9%E4%BB%B6">易变对象</a>。</p></blockquote><p>比起<a href="https://zh.wikipedia.org/wiki/%E6%8C%87%E4%BB%A4%E5%BC%8F%E7%B7%A8%E7%A8%8B">命令式编程</a>，函数式编程更加强调程序执行的结果而非执行的过程，倡导利用若干简单的执行单元让计算结果不断渐进，逐层推导复杂的运算，而不是设计一个复杂的执行过程。</p><h3>1. 举例说明</h3><p>有一个数据转换的需求，需要将 <code>[&#x27;tom&#x27;, &#x27;bob&#x27;, &#x27;alice&#x27;]</code> 转换为 <code>[{name: &#x27;Tom&#x27;}, {name: &#x27;Bob&#x27;}, {name: &#x27;Alice&#x27;}]</code>。</p><p>解析一下功能点：</p><ul><li>字符串数组转 <code>key</code> 为 <code>name</code> 数组对象；</li><li><code>name</code> 字符串转换为首字符大写。</li></ul><h4>命令式编程</h4><p>命令式编程实现该需求，实现思路如下：</p><ul><li>声明临时变量 <code>arr2</code> 存放新数组；</li><li>声明临时变量 <code>first</code>、<code>rest</code> 存放字符串，并进行转首字母大写的操作；</li><li>通过 <a href="http://array.map">array.map</a> 得到新数组，赋值给 <code>arr2</code>。</li></ul><p>实现代码如下：</p><pre><code class="language-javascript">const arr = [&#x27;tom&#x27;, &#x27;bob&#x27;, &#x27;alice&#x27;]
+const arr2 = arr.map(i =&gt; {
+ const first = i.substring(0, 1)
+ const rest = i.substring(1, i.length)
+ return {
+  name: first.toUpperCase() + rest.toLowerCase()
+ }
+})
+</code></pre><h4>函数式编程</h4><p>函数式编程实现该需求，实现思路如下：</p><ul><li>字符串转首字母大写的函数；</li><li>字符串生成对象的函数；</li><li>字符串转指定格式对象的函数；</li><li>数组转数组对象的函数。</li></ul><p>实现代码如下：</p><pre><code class="language-javascript">const { curry, compose, map } = require(&#x27;ramda&#x27;)
+
+// 首字符大写
+const capitalize = (x) =&gt; x[0].toUpperCase() + x.slice(1).toLowerCase()
+
+// 字符串生成对象
+const genObj = curry((key, x) =&gt; {
+  let obj = {}
+  obj[key] = x
+  return obj
+})
+
+// 字符串转对象，ex：&#x27;tom&#x27; =&gt; { name: &#x27;Tom&#x27; }
+const convert2Obj = compose(genObj(&#x27;name&#x27;), capitalize)
+
+// 数组转数组对象，ex：[&#x27;tom&#x27;] =&gt; [{ name: &#x27;Tom&#x27; }]
+const convertName = map(convert2Obj)
+
+console.log(convertName([&#x27;tom&#x27;, &#x27;bob&#x27;, &#x27;alice&#x27;]))
+</code></pre><blockquote><p>这儿使用到了 <a href="https://ramda.cn/">ramda</a>  包中的 <code>curry</code> 和 <code>compose</code> 函数。</p></blockquote><p>从上面例子可知，函数式编程就是通过函数的组合变换去解决问题的一种编程方式。</p><p>在函数式编程中，函数是<a href="https://zh.wikipedia.org/wiki/%E5%A4%B4%E7%AD%89%E5%AF%B9%E8%B1%A1">头等对象</a>，意思是说一个函数，既可以作为其它函数的输入参数值，也可以从函数中返回值，被修改或者被分配给一个变量。</p><h2>二、函数式编程的特点</h2><p>在上述例子中，函数式编程看起来比命令式编程更加复杂，难以理解，那我们为什么要学习函数式编程，它能够给我们带来什么呢？</p><p>学习函数式编程，是为了让我们在编程过程中有更多编程范式的选择，可以根据不同的场景选择不同的编程范式。</p><p>那为什么 React、Redux 这些流行框架都选择并推荐函数式编程呢？因为函数式编程相较于命令式编程、面向对象编程而言，更易维护，可读性高，方便扩展。</p><h3>1. 声明式编程</h3><p>函数式编程大多时候都是在声明我需要做什么，而非怎么去做。这种编程风格称为 <a href="https://baike.baidu.com/item/%E5%A3%B0%E6%98%8E%E5%BC%8F%E7%BC%96%E7%A8%8B/9939512">声明式编程</a>。</p><p>举例说明：在使用 React 时，只要描述UI，接下来状态变化后 UI 如何更新，是 React 在运行时帮你处理的，而不用开发者去写渲染逻辑和优化 diff 算法。</p><p>声明式编程具有以下优点：</p><ul><li><strong>简化开发者的工作</strong></li><li><strong>减少重复工作</strong></li><li><strong>留下改进的空间</strong></li><li><strong>提供全局协调能力</strong></li></ul><blockquote><p>更详细的声明式编程介绍：<a href="https://zhuanlan.zhihu.com/p/26085755">从年会看声明式编程(Declarative Programming)</a>。</p></blockquote><h3>2. 纯函数</h3><p>函数式编程使用<strong>纯函数</strong>组合变换计算，纯函数指的是<strong>相同的输入，永远会得到相同的输出</strong>，纯函数有以下特征：</p><h4>2.1 不依赖外部状态</h4><p>纯函数不会依赖全局变量、<code>this</code> 等外部状态。</p><pre><code class="language-javascript">// 非纯函数
+let counter = 0
+
+function increment() {
+  // 引用了外部变量
+    return counter++
+}
+
+// 纯函数
+const increment = (counter) =&gt; counter + 1
+</code></pre><h4>2.2 数据不可变</h4><p>纯函数不修改全局变量，不修改入参，不修改对象，当需要修改一个对象时，应该创建一个新的对象用来修改，而不是修改已有的对象。</p><pre><code class="language-javascript">// 非纯函数
+let obj = {}
+
+function genObj() {
+    obj.a = &#x27;a&#x27;
+}
+
+// 纯函数
+const genObj = (a) =&gt; {
+    return {
+        [a]: a
+    }
+}
+</code></pre><h4>2.3 没有副作用</h4><p>纯函数没有副作用，副作用是在计算结果的过程中，系统状态的一种变化，或者与外部世界进行的可观察的交互。</p><blockquote><p>副作用可能包含，但不限于：更改文件系统、往数据库插入记录、发送一个 http 请求、可变数据、打印/log、获取用户输入、DOM 查询、访问系统状态等。</p></blockquote><h4>2.4 小结</h4><p>纯函数不会指向不明的 <code>this</code>、不会引用全局变量、不会直接修改数据，可以大大的提升代码的易维护性。</p><h2>三、如何使用函数式编程</h2><p>函数式编程中，函数是一等公民，那么怎么把一个复杂函数转换成多个单元函数，然后怎么把多个单元函数组合起来按顺序依次执行呢，这时候就需要用到柯里化（curry）和函数组合（compose）了。</p><h3>1. 柯里化（curry）</h3><p>柯里化的就是将一个多元函数，转换成一个依次调用的单元函数。</p><pre><code class="language-javascript">f(a,b,c) → f(a)(b)(c)
+</code></pre><p>如下是一个柯里化的加法函数：</p><pre><code class="language-javascript">var add = function(x) {
+  return function(y) {
+    return x + y;
+  };
+};
+
+var increment = add(1);
+var addTen = add(10);
+
+increment(2);
+// 3
+
+addTen(2);
+// 12
+</code></pre><p>如下是使用 ramda 封装的 curry 生成的单元函数：</p><pre><code class="language-javascript">const { curry } = require(&#x27;ramda&#x27;);
+const replace = curry((a, b, str) =&gt; str.replace(a, b));
+const replaceSpaceWith = replace(/\s*/);
+const replaceSpaceWithComma = replaceSpaceWith(&#x27;,&#x27;);
+const replaceSpaceWithDash = replaceSpaceWith(&#x27;-&#x27;);
+</code></pre><h3>2. 函数组合（compose）</h3><p>函数组合就是将多个函数组合成一个函数。</p><p>如下是使用 ramda 封装的 compose 生成的函数组合：</p><pre><code class="language-javascript">const compose = require(&#x27;ramda&#x27;)
+
+const f = x =&gt; x + 1;
+const g = x =&gt; x * 2;
+const fg = compose(f, g);
+fg(1) //3
+
+</code></pre><p>函数组合让代码变得简单而富有可读性，同时通过不同的组合方式，我们可以轻易组合出其他常用函数，让我们的代码更具表现力。</p><h2>小结</h2><p>通过上文，相信你已经对函数式编程有了一些了解，下方有一些参考资料，推荐你进行更深入的学习。</p><p>学习函数式编程只是为了让你在开发过程中多一个编程范式的选择，大多时候我们无法将所有函数写成纯函数的形式，但是我们仍可以学习函数式编程的不依赖外部状态、不改写数据的做法，通过减少共享的数据来减少开发过程的 bug 数。</p><p>希望本文能对你有所帮助，感谢阅读～</p><p>别忘了点个赞鼓励一下我哦，笔芯❤️</p><h2>参考资料</h2><ul><li><a href="https://llh911001.gitbooks.io/mostly-adequate-guide-chinese/content/">函数式编程指北</a></li><li><a href="https://juejin.cn/post/6844903936378273799">简明 JavaScript 函数式编程——入门篇</a></li><li><a href="https://juejin.cn/post/6844903743117361165#heading-2">函数式编程，真香</a></li><li><a href="https://zhuanlan.zhihu.com/p/26085755">从年会看声明式编程(Declarative Programming)</a></li></ul>]]></content:encoded>
+        </item>
+        <item>
+            <title><![CDATA[React-你有完全了解 Hooks 吗]]></title>
+            <link>https://jiaozitang.github.io/blog/2022/02/12/React-Hooks</link>
+            <guid>/2022/02/12/React-Hooks</guid>
+            <pubDate>Sat, 12 Feb 2022 19:11:14 GMT</pubDate>
+            <description><![CDATA[本文从 Hooks 究竟是什么，为什么要使用 Hooks，React 提供了哪些常用 Hooks，以及如何自定义 Hooks 4 个方面带你深入理解 React Hooks。]]></description>
+            <content:encoded><![CDATA[<p><img src="https://img14.360buyimg.com/ling/jfs/t1/211906/13/12376/431721/6208fae4E49caa61b/7f286fcdbf89fd66.jpg"/></p><blockquote><p>本文从 Hooks 究竟是什么，为什么要使用 Hooks，React 提供了哪些常用 Hooks，以及如何自定义 Hooks 4 个方面带你深入理解 React Hooks。</p></blockquote><h2>一、前言</h2><p>Hooks 用于在不编写 class 的情况下，使用 state 以及其他 React 特性。那么 Hooks 究竟是什么，为什么要使用 Hooks，React 提供了哪些常用 Hooks，以及如何自定义 Hooks 呢，下文将为您一一揭晓。</p><blockquote><p>本文的学习资料主要来自 <a href="https://zh-hans.reactjs.org/docs/hooks-intro.html">React 官方文档-Hook</a>和王沛老师的专栏<a href="https://time.geekbang.org/column/article/376577">《React Hooks 核心原理与实战》</a>。</p></blockquote><h2>二、什么是 Hooks</h2><p>Hooks 译为钩子，Hooks 就是在函数组件内，负责钩进外部功能的函数。</p><p>React 提供了一些常用钩子，React 也支持自定义钩子，这些钩子都是用于为函数引入外部功能。</p><p>当我们在组件中，需要引入外部功能时，就可以使用 React 提供的钩子，或者自定义钩子。</p><p>比如在组件内引入可管理 state 的功能，就可以使用 useState 函数，下文会详细介绍 useState 的用法。</p><h2>三、为什么要用 Hooks</h2><p>使用 Hooks 有 2 大原因：</p><ul><li>简化逻辑复用；</li><li>让复杂组件更易理解。</li></ul><h3>1. 简化逻辑复用</h3><p>在 Hooks 出现之前，React 必须借用高阶组件、render props 等复杂的设计模式才能实现逻辑的复用，但是高阶组件会产生冗余的组件节点，让调试更加复杂。</p><p>Hooks 让我们可以在无需修改组件结构的情况下复用状态逻辑，下文会详细介绍自定义 Hooks 的用法。</p><h3>2. 让复杂组件更易理解</h3><p>在 class 组件中，同一个业务逻辑的代码分散在组件的不同生命周期函数中，而 Hooks 能够让针对同一个业务逻辑的代码聚合在一块，让业务逻辑清晰地隔离开，让代码更加容易理解和维护。</p><h2>四、常用的 Hooks</h2><h3>1. useState</h3><p>useState 是允许你在 React 函数组件中添加 state 的 Hook。</p><p>使用示例如下：</p><pre><code class="language-javascript">import React, { useState } from &#x27;react&#x27;;
+
+function Example() {
+  // 声明一个叫 &quot;count&quot; 的 state 变量
+  const [count, setCount] = useState(0);
+  // ...
+</code></pre><p>以上代码声明了一个初始值为 0 的 state 变量 count，通过调用 setCount 来更新当前的 count。</p><h3>2. useEffect</h3><p>useEffect 可以让你在函数组件中执行副作用操作。</p><p>副作用是指一段和当前执行结果无关的代码，常用的副作用操作如数据获取、设置订阅、手动更改 React 组件中的 DOM。</p><p>useEffect 可以接收两个参数，代码如下：</p><pre><code class="language-javascript">useEffect(callback, dependencies)
+</code></pre><p>第一个参数是要执行的函数 callback，第二个参数是可选的依赖项数组 dependencies。</p><p>其中依赖项是可选的，如果不指定，那么 callback 就会在每次函数组件执行完后都执行；如果指定了，那么只有依赖项中的值发生变化的时候，它才会执行。</p><p>使用示例如下：</p><pre><code class="language-javascript">function Example() {
+  const [count, setCount] = useState(0);
+
+  // Similar to componentDidMount and componentDidUpdate:
+  useEffect(() =&gt; {
+    // Update the document title using the browser API
+    document.title = `You clicked ${count} times`;
+
+    return () =&gt; {
+        // 可用于做清除，相当于 class 组件的 componentWillUnmount
+    }
+
+  }, [count]); // 指定依赖项为 count，在 count 更新时执行该副作用
+  // ...
+</code></pre><p>以上代码通过 useEffect 实现了当依赖项 count 更新时，执行副作用函数，并通过返回回调函数清除上一次的执行结果。</p><p>另外，useEffect 提供了四种执行副作用的时机：</p><ul><li><strong>每次 render 后执行</strong>：不提供第二个依赖项参数。比如 useEffect(() =&gt; {})；</li><li><strong>仅第一次 render 后执行</strong>：提供一个空数组作为依赖项。比如 useEffect(() =&gt; {}, [])；</li><li><strong>第一次以及依赖项发生变化后执行</strong>：提供依赖项数组。比如 useEffect(() =&gt; {}, <!-- -->[deps]<!-- -->)；</li><li><strong>组件 unmount 后执行</strong>：返回一个回调函数。比如 useEffect() =&gt; { return () =&gt; {} }, [])。</li></ul><h3>3. useCallback</h3><p>useCallback 定义的回调函数只会在依赖项改变时重新声明这个回调函数，这样就保证了<strong>组件不会创建重复的回调函数</strong>。而接收这个回调函数作为属性的组件，也<strong>不会频繁地需要重新渲染</strong>。</p><p>使用示例如下：</p><pre><code class="language-javascript">const memoizedCallback = useCallback(() =&gt; {
+  doSomething(a, b)
+}, [a, b])
+</code></pre><p>以上代码在依赖项 a、b 发生变化时，才会重新声明回调函数。</p><h3>4. useMemo</h3><p>useMemo 定义的创建函数只会在某个依赖项改变时才重新计算，有助于每次渲染时<strong>不会重复的高开销的计算</strong>，而接收这个计算值作为属性的组件，也<strong>不会频繁地需要重新渲染</strong>。</p><p>使用示例如下：</p><pre><code class="language-javascript">const memoizedValue = useMemo(() =&gt; computeExpensiveValue(a, b), [a, b])
+</code></pre><p>以上代码在依赖项 a、b 发生变化时，才会重新计算。</p><h3>5. useRef</h3><p>useRef 返回一个 ref 对象，这个 ref 对象在组件的整个生命周期内持续存在。</p><p>他有 2 个用处：</p><ul><li><strong>保存 DOM 节点的引用</strong>；</li><li><strong>在多次渲染之间共享数据</strong>。</li></ul><p>保存 DOM 节点的引入使用示例如下：</p><pre><code class="language-javascript">function TextInputWithFocusButton() {
+  const inputEl = useRef(null)
+  const onButtonClick = () =&gt; {
+    // `current` 指向已挂载到 DOM 上的文本输入元素
+    inputEl.current.focus()
+  }
+  return (
+    &lt;&gt;
+      &lt;input ref={inputEl} type=&#x27;text&#x27; /&gt;
+      &lt;button onClick={onButtonClick}&gt;Focus the input&lt;/button&gt;
+    &lt;/&gt;
+  )
+}
+</code></pre><p>以上代码通过 useRef 创建了 ref 对象，保存了 DOM 节点的引用，可以对 ref.current 做 DOM 操作。</p><p>在多次渲染之间共享数据示例如下：</p><pre><code class="language-javascript">import React, { useState, useCallback, useRef } from &#x27;react&#x27;
+
+export default function Timer() {
+  // 定义 time state 用于保存计时的累积时间
+  const [time, setTime] = useState(0)
+
+  // 定义 timer 这样一个容器用于在跨组件渲染之间保存一个变量
+  const timer = useRef(null)
+
+  // 开始计时的事件处理函数
+  const handleStart = useCallback(() =&gt; {
+    // 使用 current 属性设置 ref 的值
+    timer.current = window.setInterval(() =&gt; {
+      setTime((time) =&gt; time + 1)
+    }, 100)
+  }, [])
+
+  // 暂停计时的事件处理函数
+  const handlePause = useCallback(() =&gt; {
+    // 使用 clearInterval 来停止计时
+    window.clearInterval(timer.current)
+    timer.current = null
+  }, [])
+
+  return (
+    &lt;div&gt;
+      {time / 10} seconds.
+      &lt;br /&gt;
+      &lt;button onClick={handleStart}&gt;Start&lt;/button&gt;
+      &lt;button onClick={handlePause}&gt;Pause&lt;/button&gt;
+    &lt;/div&gt;
+  )
+}
+</code></pre><p>以上代码通过 useRef 创建了一个变量名为 timer 的 ref 对象，该对象可以在跨组件渲染时调用，在开始计时时新建计时器，在暂停计时时清空计时器。</p><h3>6. useContext</h3><p>useContext 用于接收一个 context 对象并返回该 context 的值，可以实现跨层级的数据共享。</p><p>示例如下：</p><pre><code class="language-javascript">// 创建一个 context 对象
+const MyContext = React.createContext(initialValue)
+function App() {
+  return (
+    // 通过 Context.Provider 传递 context 的值
+    &lt;MyContext.Provider value=&#x27;1&#x27;&gt;
+      &lt;Container /&gt;
+    &lt;/MyContext.Provider&gt;
+  )
+}
+
+function Container() {
+  return &lt;Test /&gt;
+}
+
+function Test() {
+  // 获取 Context 的值
+  const theme = useContext(MyContext) // 1
+  return &lt;div&gt;&lt;/div&gt;
+}
+</code></pre><p>以上代码通过 useContext 取得了 App 组件中定义的 Context，做到了跨层次组件的数据共享。</p><h3>7. useReducer</h3><p>useReducer 用来引入 Reducer 功能。</p><p>示例如下：</p><pre><code class="language-javascript">const [state, dispatch] = useReducer(reducer, initialState)
+</code></pre><p>它接受 Reducer 函数和状态的初始值作为参数，返回一个数组。数组的第一个成员是状态的当前值，第二个成员是发送 action 的 dispatch 函数。</p><h2>五、自定义 Hooks</h2><p>通过自定义 Hooks，可以将组件逻辑提取到可重用的函数中。</p><h3>1. 如何创建自定义 Hooks？</h3><p>自定义 Hooks 就是函数，它有 2 个特征区分于普通函数：</p><ul><li>名称以 “use” 开头；</li><li>函数内部调用其他的 Hook。</li></ul><p>示例如下：</p><pre><code class="language-javascript">import { useState, useCallback } from &#x27;react&#x27;
+
+function useCounter() {
+  // 定义 count 这个 state 用于保存当前数值
+  const [count, setCount] = useState(0)
+  // 实现加 1 的操作
+  const increment = useCallback(() =&gt; setCount(count + 1), [count])
+  // 实现减 1 的操作
+  const decrement = useCallback(() =&gt; setCount(count - 1), [count])
+  // 重置计数器
+  const reset = useCallback(() =&gt; setCount(0), [])
+
+  // 将业务逻辑的操作 export 出去供调用者使用
+  return { count, increment, decrement, reset }
+}
+
+// 组件1
+function MyComponent1() {
+  const { count, increment, decrement, reset } = useCounter()
+}
+
+// 组件2
+function MyComponent2() {
+  const { count, increment, decrement, reset } = useCounter()
+}
+</code></pre><p>以上代码通过自定义 Hooks useCounter，轻松的在 MyComponent1 组件和 MyComponent2 组件之间复用业务逻辑。</p><h3>2. 自定义 Hooks 库 - react-use</h3><p>React 官方提供了 <a href="https://github.com/streamich/react-use">react-use</a> 库，其中封装了大量可直接使用的自定义 Hooks，帮助我们简化组件内部逻辑，提高代码可读性、可维护性。</p><p>其中我们常用的自定义 Hooks 有：</p><ul><li>useLocation 和 useSearchParam：跟踪页面导航栏位置状态；</li><li>useScroll：跟踪 HTML 元素的滚动位置；</li><li>useScrolling：跟踪 HTML 元素是否正在滚动；</li><li>useAsync, useAsyncFn, and useAsyncRetry：解析一个 async 函数；</li><li>useTitle：设置页面的标题。</li></ul><blockquote><p>可至 <a href="https://github.com/streamich/react-use">react-use 官网</a>学习使用。</p></blockquote><h2>六、小结</h2><p>本文从 Hooks 究竟是什么，为什么要使用 Hooks，React 提供了哪些常用 Hooks，以及如何自定义 Hooks 4 个方面介绍了 React Hooks，相信大家对 React Hooks 已经有了更加深入的理解。</p><p>希望能对你有所帮助，感谢阅读～</p><p>别忘了点个赞鼓励一下我哦，笔芯 ❤️</p><h2>参考资料</h2><ul><li><a href="https://zh-hans.reactjs.org/docs/hooks-intro.html">React 官方文档-Hook</a></li><li><a href="https://time.geekbang.org/column/article/376577">React Hooks 核心原理与实战</a></li><li><a href="https://www.ruanyifeng.com/blog/2019/09/react-hooks.html">React Hooks 入门教程</a></li><li><a href="https://segmentfault.com/a/1190000038768433">轻松掌握 React Hooks 底层实现原理</a></li><li><a href="https://juejin.cn/post/6844903704437456909">阅读源码后，来讲讲 React Hooks 是怎么实现的</a></li></ul>]]></content:encoded>
+        </item>
+        <item>
+            <title><![CDATA[专栏学习心得《大厂晋升指南》]]></title>
+            <link>https://jiaozitang.github.io/blog/2022/02/11/up-up-up</link>
+            <guid>/2022/02/11/up-up-up</guid>
+            <pubDate>Fri, 11 Feb 2022 19:11:14 GMT</pubDate>
+            <description><![CDATA[s08502502142022]]></description>
+            <content:encoded><![CDATA[<p><img src="https://img12.360buyimg.com/ling/jfs/t1/109470/8/23866/494812/6209a784E3a20dad5/22cf45c213a15cc0.jpg" alt="s08502502142022"/></p><blockquote><p>本文从晋升体系、学习方法、做事方法 4 个方向介绍了学习大厂晋升指南的心得，其中晋升体系、职级详解提升认知，学习方法、做事方法提高效率，相信会对你有所帮助。</p></blockquote><h2>一、前言</h2><p>在比较长的一段时间，我的学习方向非常随心所欲，想学什么就开始读官方文档，找源码，学习效率不高。</p><p>我也开始反思，我这样的学习方法是不是太过于浪费好不容易在下班后挤出的宝贵时间。</p><p>我开始找提高学习效率的教程，于是找到了<a href="https://time.geekbang.org/column/intro/100064501?tab=catalog">《大厂晋升指南》</a>。在专栏中，我找到了好的学习方法和做事方法，下文将分享我的一些学习心得。</p><p><strong>薅羊毛 tips：</strong>
+<strong>如果你有点进去你会发现这个专栏是收费的！不过不怕，可以薅羊毛，下载 app 可以免费阅读 5 天，差不多也能学完这个专栏。</strong></p><h2>二、晋升体系</h2><p>在第一章节晋升体系中，了解职级体系、晋升流程、晋升原则、晋升逻辑、职级档次，不再无的放矢的寻找晋升的方法。</p><h3>1. 职级体系</h3><p>互联网公司晋升体系包含介跨越式职级体系和阶梯式职级体系两种，跨越式相邻级别差异大、晋升机会少，阶梯式相邻级别差异小、晋升机会多。</p><p>了解了职级体系后，判断自己所在公司属于哪个类别，清晰自己的目标。</p><p><img src="https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/91d544789786481c902e47c2bc3eca77~tplv-k3u1fbpfcp-zoom-1.image" alt="s11141202112022"/></p><h3>2. 晋升流程</h3><p>晋升流程包括主管提名-&gt;部门内初筛-&gt;评委团考察-&gt;部门调控-&gt;高层确认-&gt;主管/HR 沟通。</p><ul><li>主管提名：<strong>绩效满足、年限满足、能力满足</strong>；</li><li>部门内初筛：横向对比多个团队提名的人时，<strong>能力满足</strong>；</li><li>评委团考察：<strong>答辩材料过关、答辩现场表现过关</strong>；</li><li>部门调控：横向对比多个团队答辩的人时，<strong>答辩过关</strong>；</li><li>高层确认：等待即可；</li><li>主管/HR 沟通：等待即可。</li></ul><p>因此，技术能力和答辩的技巧是同等重要，不仅在日常要储备技术能力，也要加强表达技巧，能够把自己优秀的点非常好的表现出来。</p><h3>3. 晋升原则</h3><p>晋升有 3 大原则，满足以下原则会更容易晋升：</p><ul><li>主动原则：<strong>主动做事</strong>（主动找 leader 沟通工作、主动找别人沟通了解更多信息）；</li><li>成长原则：<strong>一边做事一边挖掘成长点提升自己</strong>（而不是一直原地踏步用熟悉的技术）；</li><li>价值原则：<strong>学习为公司产出价值的技能</strong>（而不是只学习自己感兴趣的技能）。</li></ul><p>因此，在日常工作中，应该更加主动的沟通工作，在工作中发掘可成长的点，如引用新技术，并且持续的学习对工作有帮助的技能。</p><h3>4. 晋升逻辑</h3><p>怎么判断有没有达到晋升要求呢？应该满足以下两点：</p><ul><li><strong>能够做好当前级别的事</strong>（做到精通的水平，精通=优化和创造新的经验）；</li><li><strong>寻找机会提前做下一级别的事，并取得工作成果</strong>。</li></ul><p>因此，在日常工作中，不能仅仅埋头干活，还应该思考优化，去创造新的经验，在完全精通当前工作时，主动沟通，寻找机会提前做下一级别的事。</p><p>因为晋升和表白一样，表白是两个人时机到了互有感觉就能成功，而晋升是你已经掌握了下一级别的能力就能晋升到下一级别。两者都是充分准备后，水到渠成的事情。</p><h3>5. COMD 能力模型</h3><p>通过 COMD 能力模型把抽象的能力要求具体化，帮助我们清晰成长的目标包含的能力范围。</p><p>COMD 能力模型包含 4 种复杂度 + 3 个维度，核心思想是通过事情的复杂度来判断能力的高低。</p><p>4 种复杂度：</p><ul><li>规模复杂度：规模越大，规模复杂度越高；</li><li>时间复杂度：时间跨度越大，时间复杂度越高；</li><li>环境复杂度：环境不确定性越高，环境复杂度越高；</li><li>创新复杂度：创新程度越高，创新复杂度越高。</li></ul><p>3 个维度：</p><ul><li>技术；</li><li>业务；</li><li>管理。</li></ul><p>COMD 模型应用在 P6 的例子：</p><p><img src="https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/a61a1f0af9ff4485949735d8f0af396a~tplv-k3u1fbpfcp-zoom-1.image" alt="s11383702112022"/></p><p>掌握 COMD 模型后，更加清晰各个级别的能力要求，可以按照列出的能力要求进行针对性提升。</p><h3>6. 职级档次</h3><p>以阿里为例列举了 P5-P10 的职级档次对应的角色：</p><p><img src="https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/c5cdabce7f194c5f864dc536a5ce9f69~tplv-k3u1fbpfcp-zoom-1.image" alt="s11264202112022"/></p><p>一般来说，高级别的能力要求默认包含了低级别的要求。</p><h2>三、职级详解</h2><p>从技术、业务、管理 3 个方向对 P5-P9 进行职级详解：</p><blockquote><p>各个职级具体的提升攻略见<a href="https://time.geekbang.org/column/article/319262">《大厂晋升指南-职级详解》</a>。</p></blockquote><h3>1. P5</h3><ul><li>技术：工作岗位中实际用到的基础技术的积累；</li><li>业务：熟悉各项业务的处理逻辑；</li><li>管理：了解公司的管理制度和项目流程。</li></ul><h3>2. P6</h3><ul><li>技术：掌握团队用到的技术“套路”；</li><li>业务：掌握所有功能并深度理解处理逻辑；</li><li>管理：推进项目中的子任务。</li></ul><h3>3. P7</h3><ul><li>技术：精通团队相关技术；</li><li>业务：关注业务整体；</li><li>管理：指挥 10 人以内的小团队。</li></ul><h3>4. P8</h3><ul><li>技术：精通领域相关技术；</li><li>业务：熟悉多个业务或精通端到端业务；</li><li>管理：核心是抓重点。</li></ul><h3>5. P9</h3><ul><li>技术：跨领域整合能力；</li><li>业务：从理解规划到亲自导演；</li><li>管理：授权但不要放羊。</li></ul><p><img src="https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/417289a1591241ab8c3ccfbedc6c2ade~tplv-k3u1fbpfcp-zoom-1.image" alt="s11272702112022"/></p><h2>四、学习方法</h2><h3>1. 学习方向</h3><p>找到正确的学习方向，学习方向应该围绕以下 2 个方面：</p><ul><li>工作强相关（与工作弱相关的学习优先级可降低）；</li><li>能产出价值（没有产出的学习优先级可降低）。</li></ul><h3>2. 链式学习法</h3><p>链式学习法，可以提升技术深度，让知识形成锁链，环环相扣。</p><p>分为以下步骤：</p><ul><li>明确一项技术的深度可以分为哪些层；</li><li>明确要学到哪一层；</li><li>明确每一层应该怎么学。</li></ul><h3>3. 比较学习法</h3><p>比较学习法，通过横向对比不同技术，让技术选型更加有理有据。</p><p>分为以下步骤：</p><ul><li>整理领域关键技术点；</li><li>整理不同技术的差异点；</li><li>整理差异点背后的原理和对应用场景的影响。</li></ul><h3>4. 间隔学习法</h3><blockquote><p>该方法来自<a href="https://time.geekbang.org/column/article/331463">大厂晋升指南 - 19 | 链式 &amp; 比较 &amp; 环式学习法：怎么多维度提升技术能力？</a>评论区</p></blockquote><p>长期记忆的形成，需要有个巩固的过程，可能是数小时，可能是数天，在这期间，记忆痕迹得到加深，所学的新知识与旧知识建立连接，带来稳固的长期记忆，因此不要频繁的进行集中式学习，而是有间隔的进行。</p><p>拿学习专栏来说，不要反复地去学习同一章节，而是有间隔地进行，等遗忘一些后进行练习，能够形成长久的记忆。</p><h3>5. Teach 学习法</h3><p>通过教别人来提升自己，我的方式是<strong>写博客</strong>。</p><p>学习完技术后，将学到的东西通过博客的方式，传授给其他人。</p><p>在写博客的过程中可以巩固、梳理知识，并且输出学习成果，加强学习的深度。</p><p><img src="https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/bde90cba595e452290e5c688e4d4a817~tplv-k3u1fbpfcp-zoom-1.image" alt="s11450402112022"/></p><h2>五、做事方法</h2><h3>1. 3C 方案设计法</h3><p>每次做事的时候至少设计 3 个方案，择优执行。</p><p>能够帮助我们系统的梳理一个领域，提升整体流程和工作效率。</p><h3>2. PDCA 执行法</h3><p>PDCA 执行法把事情的执行过程分成四个环节，保证具体事项高效高质地落地：</p><ul><li>计划：确定具体任务、阶段目标、时间节点和具体责任人；</li><li>执行：落地各项具体活动；</li><li>检查：检查实际执行结果；</li><li>行动：明确下一步需要采取的措施。</li></ul><h3>3. 5Why 分析法</h3><p>找准问题源头才能治标又治本，通过追问 5 个为什么来分析问题的根本原因，从而得到彻底的解决方案。</p><h3>4. 金字塔汇报法</h3><p>金字塔汇报法来源于金字塔原理，金字塔原理的核心思想是任何事情都可以归纳出一个中心思想，中心思想可由三到七个论点支持，每个论点可以由三到七个论据支撑。</p><p>金字塔汇报法：</p><ul><li>总体结论：先抛出关键性结论；</li><li>具体分析：分析结论的因果；</li><li>关键事项：介绍做过的关键事项的情况；</li><li>总结改进：总结经验教训和后续改进措施。</li></ul><p>关键事项汇报技巧：</p><ul><li>全局大图：展示整体情况；</li><li>演进路径：展示个体的发展路径和当前所处阶段；</li><li>时间轴：展示事情发生过程；</li></ul><p><img src="https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/e5f173682c3e47949c82eda655bf5880~tplv-k3u1fbpfcp-zoom-1.image" alt="s21093702112022"/></p><h3>5. 5W1H1D 分析法</h3><p>5W1H1D 分析法用于帮助我们深入理解业务，理解业务功能=分析功能需求+分析质量需求+总结上线效果。</p><p><strong>5W：需求产生的背景和功能上线后的运行环境</strong>。</p><p><strong>1H：如何去实现，整个流程是怎么运行的</strong>。</p><p><strong>1D：上线之后的业务效果</strong>。</p><p>5W 的具体描述如下：</p><ul><li>何时：需要用到该功能的时间；</li><li>何地：需要用到该功能的地点，也可以指场所，如地铁、开车等；</li><li>何人：该功能面向的人群；</li><li>何事：这个功能具体是什么，一般描述在需求文档中；</li><li>何因：为什么需要这个功能，只有真正了解客户提出需求的驱动力，才能真正解决客户的问题。</li></ul><p>通过 5W1H8C1D 分析法快速入门，上线前分析和理解业务功能，上线后熟悉运行数据。</p><h2>六、小结</h2><p>本文从晋升体系、职级详解、学习方法、做事方法 4 个方向介绍了学习<a href="https://time.geekbang.org/column/intro/100064501?tab=catalog">《大厂晋升指南》</a>的心得，其中晋升体系、职级详解提升认知，学习方法、做事方法提高效率，想了解更多可以至原文-<a href="https://time.geekbang.org/column/intro/100064501?tab=catalog">《大厂晋升指南》</a>进行学习。</p><p>希望能对你有所帮助，感谢阅读～</p><p>别忘了点个赞鼓励一下我哦，笔芯 ❤️</p><h2>参考资料</h2><ul><li><a href="https://time.geekbang.org/column/intro/100064501?tab=catalog">《大厂晋升指南》</a></li></ul>]]></content:encoded>
+        </item>
+        <item>
+            <title><![CDATA[【译】你知道 Code Review 应该检查哪些问题吗]]></title>
+            <link>https://jiaozitang.github.io/blog/2022/01/31/【译】你知道 Code Review 应该检查哪些问题吗</link>
+            <guid>/2022/01/31/【译】你知道 Code Review 应该检查哪些问题吗</guid>
+            <pubDate>Mon, 31 Jan 2022 19:11:14 GMT</pubDate>
+            <description><![CDATA[原文：https://www.michaelagreiler.com/code-review-checklist-2/]]></description>
+            <content:encoded><![CDATA[<p>原文：<a href="https://www.michaelagreiler.com/code-review-checklist-2/">https://www.michaelagreiler.com/code-review-checklist-2/</a></p><p>原文作者：<a href="https://www.michaelagreiler.com/">Dr. McKayla</a></p><h2>一、前言</h2><p>Code Review 可以帮助我们提高代码质量、减少项目问题，那么您知道 Code Review 可以从哪些地方开始审查吗？</p><p>下文将列出一个详细的代码审查清单，该清单是作者 Dr. McKayla 在 Microsoft 与数百名工程师一起工作，分析了数千次代码审查后，总结得出的最全代码审核清单。</p><p>它分为 7 个独立的部分，每个部分都会引导我们完成几个问题。</p><h2>二、代码审查清单</h2><h3>1. 功能检查</h3><ul><li>此代码更改是否完成了它应该做的事情？</li><li>这个解决方案可以简化吗？</li><li>您是否会以在代码的可维护性、可读性、性能和安全性等方面有更好的方式解决问题？</li><li>代码库中是否有类似的功能？如果有，为什么不复用此功能？</li><li>这段代码是否遵循面向对象的分析和设计原则，如单一职责原则、开闭原则、Liskov 替换原则、接口隔离、依赖注入？</li></ul><h3>2. bug 检查</h3><ul><li>您能想到代码未按预期运行的任何用例吗？</li><li>您能想到任何可能破坏代码的输入或外部事件吗？</li></ul><h3>3. 依赖项检查</h3><ul><li>如果此更改需要在代码之外进行更新，例如更新文档、配置、自述文件，是否已完成？</li><li>这种变化是否会对系统的其他部分产生任何影响，是否已经兼容？</li><li>如果代码处理用户输入，它是否解决了跨站点脚本、SQL 注入等安全漏洞，它是否进行输入清理和验证？</li></ul><h3>4. 可用性和可访问性</h3><ul><li>从可用性的角度来看，提议的解决方案是否设计良好？</li><li>API 是否有据可查？</li><li>UI 是否可访问？</li><li>API/UI 使用起来是否直观？</li></ul><h3>5. 表现</h3><ul><li>您是否认为此代码更改会对系统性能产生负面影响？</li><li>您是否看到任何提高代码性能的潜力？</li></ul><h3>6. 测试</h3><ul><li>代码是否可测试？</li><li>它是否有足够的自动化测试（单元/集成/系统测试）？</li><li>现有的测试是否合理地涵盖了代码更改？</li><li>是否有一些测试用例、输入或边缘用例需要额外测试？</li></ul><h3>7. 可读性</h3><ul><li>代码容易理解吗？</li><li>哪些部分让您感到困惑，为什么？</li><li>可以通过更小的方法来提高代码的可读性吗？</li><li>代码的可读性可以通过不同的函数/方法或变量名来提高吗？</li><li>代码是否位于正确的文件/文件夹/包中？</li><li>更多注释会使代码更易于理解吗？</li><li>是否可以通过使代码本身更具可读性来删除一些注释？</li><li>您认为某些方法应该被重组以拥有更直观的控制流程吗？</li></ul><h2>三、自审代码</h2><p>代码审查清单不仅适用于代码审查人员。我们应该并首先成为自己的审查者，遵循代码审查最佳实践。</p><p>因此，在发送代码进行审核之前，请确保：</p><ul><li>代码编译并通过静态分析，没有警告</li><li>代码通过所有测试（单元、集成和系统测试）</li><li>您已经仔细检查了拼写错误并进行了清理（评论、待办事项等）</li><li>您概述了此更改的内容，包括更改的原因和更改的内容</li><li>除此之外，作为代码作者，您应该通过与审阅者相同的代码审查清单。</li></ul><h2>四、关注重要问题</h2><p>作为代码审查员，您的任务是首先寻找最重要的问题。结构或逻辑问题比代码格式等小问题更有价值。</p><p>一份出色的清单将您的注意力引导到重要和最有价值的问题上。</p><h2>五、自动化编码风格及约定</h2><p>清晰的编码风格指南是在代码库中强制执行一致性的唯一方法。而且，一致性使代码审查更快，允许人们轻松更改项目，并使您的代码库保持可读性和可维护性。</p><p>上文的审查清单没有介绍编码风格相关的内容，是因为我们建议使用自动化工具来强制遵守编码风格。通过安装及配置 prettier、eslint、tslint、stylelint 等格式化工具，节省编码风格的代码审查时间。</p><h2>六、注意表达方式</h2><p>最后，代码审查反馈的质量不仅取决于您在说什么，还取决于您怎么说。
+建议将您的反馈表述为建议而不是要求。
+例如，不要写“变量名应该是 removeObject ”，而是说“调用变量 removeObject 怎么样？”。</p><h2>七、总结</h2><p>代码审查清单以及围绕代码审查的明确规则和指南至关重要。代码审查清单可以使您的代码审查实践对您的团队更加有益，并显着加快代码审查速度。</p><p>本文详细介绍了 Code Review 的 7 种审查类型，帮助您在 Code Review 聚焦到重要和最有价值的问题上，提升 Code Review 质量。</p>]]></content:encoded>
+        </item>
+        <item>
+            <title><![CDATA[实践指南-快速搭建文档系统]]></title>
+            <link>https://jiaozitang.github.io/blog/实践指南-快速搭建文档系统</link>
+            <guid>实践指南-快速搭建文档系统</guid>
+            <pubDate>Thu, 13 Jan 2022 00:00:00 GMT</pubDate>
+            <description><![CDATA[一、背景]]></description>
+            <content:encoded><![CDATA[<h2>一、背景</h2><p>需求就是生产力，常规项目的文档说明，大多放在 <code>README.md</code> 下进行记录和说明，而对于为外部赋能的项目来说，一个对外开放的文档系统是必不可少的。</p><p>如下是可供参考一个标准的在线文档系统界面 - <a href="https://taro-docs.jd.com/taro/docs/README/index.html">taro 官网</a>：</p><p><img src="https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/1c32c48d991741f4845bf30d9a17e1c8~tplv-k3u1fbpfcp-watermark.image?" alt="image.png"/></p><h2>二、技术选型</h2><p>首先理清搭建一个在线的文档系统的要求：</p><ol><li>内置 markdown 文件转网页</li><li>对 SEO 友好</li></ol><ul><li>可通过 React 扩展网页</li><li>界面美观</li><li>文档清晰，上手简单，方便部署</li><li>拓展功能丰富，如可搜索、文档版本化</li></ul><p>在上述需求背景下，找出了以下可供参考的技术栈：</p><blockquote><p>下表格数据来源：<a href="https://blog.hming.org/2019/05/15/wen-dang-wang-zhan-sheng-cheng-gong-ju-xuan-xing/">文档网站生成工具选型</a></p></blockquote><table><thead><tr><th>开源工具对比</th><th>Hexo</th><th>VuePress</th><th>Docute</th><th>Docsify</th><th>Docusaurus</th></tr></thead><tbody><tr><td>文档生成方式</td><td>预先渲染 HTML</td><td>预先渲染 HTML</td><td>运行时解析</td><td>运行时解析</td><td>预先渲染 HTML</td></tr><tr><td>对 SEO 友好程度</td><td>友好</td><td>友好</td><td>不友好</td><td>不友好</td><td>友好</td></tr><tr><td>语法</td><td>-</td><td>Vue</td><td>Vue</td><td>Vue</td><td>React</td></tr><tr><td>官网地址</td><td><a href="https://hexo.io/zh-cn/docs/">hexo</a></td><td><a href="https://vuepress.vuejs.org/zh/">vuepress</a></td><td><a href="https://docute.org/zh/">docute</a></td><td>docsify</td><td><a href="https://docusaurus.io/zh-CN/docs">docusaurus</a></td></tr><tr><td>适用场景</td><td>个人博客</td><td>需要 SEO 支持的技术文档</td><td>公司或团队内部的文档系统</td><td>公司或团队内部的文档系统</td><td>需要 SEO 支持的技术文档</td></tr><tr><td>特点</td><td>与主题解耦，更换主题成本低</td><td>采用 vue，对 vue 开发友好</td><td>Docute（60kB）使用 Vue，Vue Router 和 Vuex</td><td>Docsify（20kB）使用的是 vanilla JavaScript </td><td>采用 React，对 React 开发友好</td></tr></tbody></table><p>选择使用了上手简单、对 SEO 友好、功能丰富的 Docusaurus 来搭建文档系统。</p><h2>三、快速搭建</h2><h3>1. 开始</h3><h4>1.1 新建项目</h4><p>安装  Node，并创建新的 Docusaurus 站点</p><pre><code class="language-chain">npx create-docusaurus@latest my-website classic
+</code></pre><h4>1.2 启动项目</h4><p>本地启动项目</p><pre><code>yarn start
+</code></pre><p>一个本地的文档系统已经搭建完成：</p><p><img src="https://p9-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/9267ab999fe44139b2bcbdb4e66ea56a~tplv-k3u1fbpfcp-watermark.image?" alt="image.png"/></p><h3>2. 目录结构</h3><p>熟悉 Docusaurus 文档系统的目录结构，清晰后续自定义配置及文档存放位置。</p><pre><code class="language-json">.
+├── blog // 包含博客的 Markdown 文件
+│   └── 2022-01-13-first-blog-post.markdown
+├── docs // 包含文档的 Markdown 文件
+│   ├── README.markdown
+│   ├── api.markdown
+│   └── changelog.markdown
+├── src // 非文档文件
+│   ├── components
+│   │   ├── HomepageFeatures.js
+│   │   └── HomepageFeatures.module.css
+│   ├── css
+│   │   └── custom.css
+│   └── pages // 转换成网站页面
+│       ├── index.js
+│       ├── index.module.css
+│       └── markdown-page.markdown
+├── static // 静态资源
+│    └── img
+├── docusaurus.config.js // 配置文件
+└── sidebars.js // 指定侧边栏文档顺序
+
+</code></pre><h3>3. 自定义内容</h3><p>熟悉了目录结构后，开始自定义配置，将初始化的文档项目，改成我们自己的内容。</p><h4>3.1 配置站点元数据</h4><p>包括：</p><ul><li><code>title</code>：标题</li><li><code>url</code>：文档系统域名</li><li><code>baseUrl</code>：域名下的一级地址</li><li><code>favicon</code>：网站图标</li></ul><p>修改 docusaurus.config.js：</p><pre><code class="language-javascript">const config = {
+  title: &#x27;distribute-sdk&#x27;,
+  url: &#x27;http://tls-pre.jd.com&#x27;,
+  baseUrl: &#x27;/distribute-sdk-docs/&#x27;,
+  favicon: &#x27;img/favicon.ico&#x27;,
+};
+</code></pre><h4>3.2 配置导航栏</h4><p>包括导航栏、logo、主站名称、coding 地址。</p><p>修改 docusaurus.config.js：</p><pre><code class="language-javascript">const config = {
+  themeConfig:
+    /** @type {import(&#x27;@docusaurus/preset-classic&#x27;).ThemeConfig} */
+    ({
+      navbar: {
+        title: &#x27;Distribute SDK&#x27;,
+        logo: {
+          alt: &#x27;Distribute SDK Logo&#x27;,
+          src: &#x27;https://img11.360buyimg.com/ling/jfs/t1/103667/23/20676/2779/61d59cd2Ef2665258/239330f23ecbae81.png&#x27;,
+          href: &#x27;docs/&#x27;,
+        },
+        items: [
+          {
+            type: &#x27;doc&#x27;,
+            docId: &#x27;README&#x27;,
+            position: &#x27;left&#x27;,
+            label: &#x27;文档&#x27;,
+          },
+          { to: &#x27;/blog&#x27;, label: &#x27;Blog&#x27;, position: &#x27;left&#x27; },
+          {
+            href: &#x27;xx&#x27;, // git remote 地址
+            label: &#x27;Coding&#x27;,
+            position: &#x27;right&#x27;,
+          },
+        ],
+      },
+    }),
+};
+</code></pre><h4>3.3 新增文档</h4><p>在 blog 路径下新建 markdown 文件，会以标题为顺序，自动生成一级目录，展示 blog 下的 markdown 文件转的静态网页。</p><p><img src="https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/394f23b601184d67922762999d30e3d7~tplv-k3u1fbpfcp-zoom-1.image" alt="s11364401222022"/>
+<img src="https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/6881496fd1204df581fdeba4b8c7e8c7~tplv-k3u1fbpfcp-zoom-1.image" alt="s11362001222022"/></p><p>在 docs 路径下新建 markdown 文件，以 markdown 文件内声明的 sidebar_position 大小排序，自动生成一级目录。展示 docs 下的 markdown 文件转的静态网页。</p><p><img src="https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/3048ad2030d44f398a59b00974688b04~tplv-k3u1fbpfcp-zoom-1.image" alt="s11381701222022"/></p><p><img src="https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/6f81f9d744294cf0aa47f9b1635abaf8~tplv-k3u1fbpfcp-zoom-1.image" alt="s11383101222022"/></p><p>如下是文档网站效果：</p><p><img src="https://p6-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/7c2b8e2634a34411b9c14d2ed0b631f5~tplv-k3u1fbpfcp-watermark.image?" alt="Untitled7.gif"/></p><h2>四、丰富功能</h2><h3>1. 自动部署</h3><p>通过公司内部 <a href="http://talos.jd.com/main/deploy">talos</a> 系统内新建项目，并在 coding 配置 webhook，实现自动部署。</p><blockquote><p>中间遇到了 talos 上编译时，node 版本低于 Docusaurus 要求的 v14 问题，故只能将编译流程放在本地进行。</p></blockquote><p><img src="https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/4222051881d64b31a975a62a9a97e79e~tplv-k3u1fbpfcp-zoom-1.image" alt="s11441601222022"/></p><blockquote><p>外网可通过 Github Pages、Gitee Pages 实现自动部署。</p></blockquote><h3>2. 自动更新 changelog</h3><p><code>lerna version</code> 提供自动更新 changelog 功能，本文档系统也是为 lerna 搭建的项目服务。</p><p>规范了如下发布 lerna 版本流程，可实现更新版本时自动更新文档系统内的 changelog 页面：</p><ul><li><p><code>lerna version --conventional-commits</code> 确定版本号并自动生成 changelog；</p></li><li><p><code>npm run changelog</code> 将自动生成的 changelog 部署至文档系统（写一个脚本复制文件至指定位置即可）；</p></li><li><p><code>lerna publish from-git</code> 发布版本。</p></li></ul><h2>五、总结</h2><p>本文讲述了快速搭建文档系统的完整过程，总结为以下 3 点：</p><ul><li>技术选型，根据需求场景选择合适的手段实现功能；</li><li>通过官方文档快速搭建网站；</li><li>根据需求丰富更多功能。</li></ul><h2>往期精彩</h2><ul><li><a href="https://juejin.cn/post/6969538044890185758">实践指南-网页生成 PDF</a></li></ul><h2>参考资料</h2><ul><li><a href="https://juejin.cn/post/7001776879531196424#heading-6">[边写边学系列] — 超级好用的文档站建站框架 Docusaurus</a></li><li><a href="https://blog.hming.org/2019/05/15/wen-dang-wang-zhan-sheng-cheng-gong-ju-xuan-xing/">文档网站生成工具选型</a></li></ul>]]></content:encoded>
+        </item>
+        <item>
+            <title><![CDATA[如何参与大型开源项目-Taro 共建]]></title>
+            <link>https://jiaozitang.github.io/blog/2021/12/20/how-to-join-Taro</link>
+            <guid>/2021/12/20/how-to-join-Taro</guid>
+            <pubDate>Mon, 20 Dec 2021 19:11:14 GMT</pubDate>
+            <description><![CDATA[一、背景]]></description>
+            <content:encoded><![CDATA[<p><img src="https://img12.360buyimg.com/ling/jfs/t1/96463/39/20942/268881/61ee05a4Eadf9afcb/cbcda37e2be5aae0.jpg"/></p><h2>一、背景</h2><p>在开发的工作中，我们都引用过大量的社区优秀的开源项目，但怎么才能更好的了解这些开源项目呢，答案是 <strong>Join it</strong>。</p><p>参与开源项目，能够帮助我们拓宽对研发项目的认识，更好的理解开源项目的原理，以及提高个人影响力、竞争力。</p><h2>二、选择项目</h2><p>人对于不熟悉的东西总是觉得高深莫测的，没有参与开源项目的经验的时候，会对参与开源项目不知道从何下手。</p><p>其实不然，在我们开发日常需求时就可以参与到开源项目中来，开发时用到的技术栈，就是我们最值得入手的开源项目了。</p><p>像我自己日常有开发微信小程序、京东小程序等跨平台的需求，这类型需求主要技术栈是 <a href="https://github.com/NervJS/taro">Taro</a>，<a href="https://github.com/NervJS/taro">Taro</a> 本身就是 github star 近 30 k 的优秀开源项目了，那么我就可以从 Taro 着手，参与到开源项目的建设工作中。</p><p><img src="https://p9-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/8a28ef429b4047ea838208d14143f1f5~tplv-k3u1fbpfcp-watermark.image?" alt="image.png"/></p><h2>三、快速开始</h2><p>首先要了解、遵守开源项目的贡献规范，一般可以在官网找到贡献规范文档，如 <a href="https://taro-docs.jd.com/taro/docs/CONTRIBUTING">Taro 贡献指南</a>。</p><h3>1. 确定贡献形式</h3><p>贡献形式多种多样，下面我以 <strong>“提交代码”</strong> 类型快速开始贡献流程。</p><p><img src="https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/b01d363357f24181835ac08d43196231~tplv-k3u1fbpfcp-zoom-1.image" alt="s17110101222022"/></p><h3>2. 找到感兴趣的 issue</h3><blockquote><p>Taro 官网：issue 中会列出所有被标记为 Help Wanted 的 Issues，并且会被分为 Easy、 Medium、 Hard 三种难易程度。</p></blockquote><p>通过 issue 标签筛选，选择自己感兴趣的 issue，可以先从 <strong>&quot;Easy&quot;</strong> 的开始：</p><p><img src="https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/70b054166ff542e7be25584fde5f6de8~tplv-k3u1fbpfcp-zoom-1.image" alt="s17454801222022"/></p><p>在 issue 中 Assignees 至自己：</p><p><img src="https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/0f1b088680d34783ac2712106b77cf4e~tplv-k3u1fbpfcp-zoom-1.image" alt="s17463701222022"/></p><h3>3. fork &amp; clone</h3><p>fork Taro 源码至自己仓库：</p><p><img src="https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/7d23dd5050964d1ea3aa0b2f75c1d0c9~tplv-k3u1fbpfcp-zoom-1.image" alt="s17280901222022"/></p><p>clone 个人仓库的 Taro 源码至本地：</p><pre><code>git clone https://github.com/jiaozitang/taro
+</code></pre><h3>4. 本地开发环境</h3><p>在 Taro 源码项目中安装依赖并编译：</p><pre><code># 安装依赖
+$ yarn
+
+# 编译
+$ yarn build
+</code></pre><p>查看该 issue 涉及哪些 package，为这些 package 设置 yarn link，并在本地编译，使得调试项目能够 link 到开发中的源码：</p><blockquote><p>Taro package 说明见文档：<a href="https://taro-docs.jd.com/taro/docs/codebase-overview">Taro 仓库概览</a></p></blockquote><pre><code># yarn link
+$ cd packages/taro-components
+$ yarn link
+
+# 本地编译
+$ yarn dev
+</code></pre><p>新建 Taro 项目用于调试 Taro 源码：</p><pre><code># 使用 npm 安装 CLI
+$ npm install -g @tarojs/cli
+
+# 初始化项目
+$ taro init myApp
+
+# yarn link
+$ yarn link &quot;@tarojs/components&quot;
+</code></pre><h3>5. 开始开发</h3><h4>5.1 功能开发</h4><p>通过以下步骤解决上述 <strong><a href="https://github.com/NervJS/taro/issues/8003">“textarea 组件 onLineChange 时间调用无效”</a></strong> issue：</p><blockquote><p>源码路径：packages/taro-components/src/components/textarea/textarea.tsx</p></blockquote><p>onLineChange 事件：</p><ul><li>新增 onLineChange 事件</li><li>监听输入事件，输入时通过行高计算行数</li><li>行数改变时触发 onLineChange</li></ul><p>auto-height 属性：</p><ul><li>新增 auto-height 属性</li><li>新增 auto-height 样式</li></ul><p>具体代码见：<a href="https://github.com/NervJS/taro/pull/10681/files">https://github.com/NervJS/taro/pull/10681/files</a></p><h4>5.2 更新测试用例</h4><p>在测试用例中添加对 onLineChange 事件、aotu-height 属性的测试。</p><blockquote><p>源码路径：packages/taro-components/<!-- -->_<!-- -->_<!-- -->tests<!-- -->_<!-- -->_<!-- -->/textarea.spec.js</p></blockquote><h4>5.3 更新文档</h4><p>在 README 中更新对 onLineChange、auto-height 的描述。</p><blockquote><p>源码地址：packages/taro-components/src/components/textarea/index.md</p></blockquote><h4>5.4 自测</h4><p>在本地测试项目 myApp 中，自测 onLineChange 事件、auto-height 属性功能是否正常，自测通过后，在 Taro 源码项目中跑自动化测试。</p><pre><code># 自动化测试
+$ npm run test
+</code></pre><h3>6. 提交 pull request</h3><p>测试通过后，在 github 中提交 pull requrst。</p><p><img src="https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/711361ce7a3b4e8bb21920c717693e6e~tplv-k3u1fbpfcp-zoom-1.image" alt="s18260601222022"/></p><h3>7. code review 流程</h3><p>提交 pull request 后等待社区 code review，并及时跟进 code review 反馈进行修改。</p><p><img src="https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/3ddab0a662824ad78e63b9ee2232d7c3~tplv-k3u1fbpfcp-zoom-1.image" alt="s09142901242022"/></p><h2>四、总结</h2><p>本文讲述了参与大型开源项目-Taro 的流程，其中以为 Taro 解决 issue 的视角，介绍了从认领 issue、解决 issue、贡献代码的完整过程。</p><p>在这个过程中，我们可以了解到如何参与开源项目并帮助开源项目解决问题，在开发工作中遇到开源项目的问题时，就可以愉快的参与进来了，不用因为一个小问题耽搁项目进度。</p><p>星星之火，可以燎原，在越来越多的开发者的参与下，开源社区的发展未来可期。</p><h2>参考资料</h2><ul><li><a href="https://juejin.cn/post/6844903918749614087">如何参与一个顶级开源项目</a></li></ul>]]></content:encoded>
+        </item>
+        <item>
+            <title><![CDATA[手写系列-实现一个铂金段位的 React]]></title>
+            <link>https://jiaozitang.github.io/blog/2021/07/22/simple-react</link>
+            <guid>/2021/07/22/simple-react</guid>
+            <pubDate>Thu, 22 Jul 2021 19:11:14 GMT</pubDate>
+            <description><![CDATA[为什么是铂金呢，因为和王者还有很远的距离。本文仅实现简单版本的 React，参考 React 16.8 的基本功能，包括虚拟 DOM、Fiber、Diff 算法、函数式组件、hooks 等。]]></description>
+            <content:encoded><![CDATA[<p><img src="https://img12.360buyimg.com/ling/jfs/t1/190951/39/10504/64205/60d82ae2E380c664f/cbb7c4b34464cce7.png"/></p><blockquote><p>为什么是铂金呢，因为和王者还有很远的距离。本文仅实现简单版本的 React，参考 React 16.8 的基本功能，包括虚拟 DOM、Fiber、Diff 算法、函数式组件、hooks 等。</p></blockquote><h1>一、前言</h1><p>本文基于 <a href="https://pomb.us/build-your-own-react/">https://pomb.us/build-your-own-react/</a> 实现简单版 React。</p><p>本文学习思路来自 <a href="https://www.bilibili.com/video/BV1Ki4y1u7Vr?t=78z">卡颂-b站-React源码，你在第几层</a>。</p><p>模拟的版本为 React 16.8。</p><p>将实现以下功能：</p><ol><li><strong>createElement（虚拟 DOM）</strong>；</li><li><strong>render</strong>；</li><li><strong>可中断渲染</strong>；</li><li><strong>Fibers</strong>；</li><li><strong>Render and Commit Phases</strong> ；</li><li><strong>协调（Diff 算法）</strong>；</li><li><strong>函数组件</strong>；</li><li><strong>hooks</strong>；</li></ol><p>下面上正餐，请继续阅读。</p><h1>二、准备</h1><h2>1. React Demo</h2><p>先来看看一个简单的 React Demo，代码如下：</p><pre><code class="language-javascript">const element = &lt;div title=&quot;foo&quot;&gt;hello&lt;/div&gt;
+const container = document.getElementById(&#x27;container&#x27;)
+ReactDOM.render(element, container);
+</code></pre><blockquote><p>本例完整源码见：<a href="https://github.com/jiaozitang/web-learn-note/blob/main/src/%E6%89%8B%E5%86%99%E7%B3%BB%E5%88%97/React/reactDemo.html">reactDemo</a></p></blockquote><p>在浏览器中打开 reactDemo.html，展示如下：</p><p><img src="https://p9-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/e67cf968275e441db891b5530da0171e~tplv-k3u1fbpfcp-watermark.image" alt="image.png"/></p><p>我们需要实现自己的 React，那么就需要知道上面的代码到底做了什么。</p><h3>1.1 element</h3><p><code>const element = &lt;div&gt;123&lt;/div&gt;</code> 实际上是 JSX 语法。</p><p><a href="https://zh-hans.reactjs.org/docs/glossary.html#jsx">React 官网</a> 对 JSX 的解释如下：</p><blockquote><p>JSX 是一个 JavaScript 语法扩展。它类似于模板语言，但它具有 JavaScript 的全部能力。JSX 最终会被 babel 编译为 React.createElement() 函数调用。</p></blockquote><p>通过 <a href="https://www.babeljs.cn/repl">babel 在线编译</a> <code>const element = &lt;div&gt;123&lt;/div&gt;</code> 。</p><p><img src="https://p6-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/006372da0fb7468e9155bc8d69448b48~tplv-k3u1fbpfcp-watermark.image" alt="image.png"/></p><p>可知 <code>const element = &lt;div&gt;123&lt;/div&gt;</code> 经过编译后的实际代码如下：</p><pre><code class="language-javascript">const element = React.createElement(&quot;div&quot;, {
+  title: &quot;foo&quot;
+}, &quot;hello&quot;);
+</code></pre><p>再来看看上文的 React.createElement 实际生成了一个怎么样的对象。</p><p>在 demo 中打印试试：</p><pre><code class="language-javascript">const element = &lt;div title=&quot;foo&quot;&gt;hello&lt;/div&gt;
+console.log(element)
+const container = document.getElementById(&#x27;container&#x27;)
+ReactDOM.render(element, container);
+</code></pre><p>可以看到输出的 element 如下：</p><p><img src="https://p6-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/7b0e14c7e8734456891b2264cd160476~tplv-k3u1fbpfcp-watermark.image" alt="image.png"/></p><p>简化一下 element：</p><pre><code class="language-javascript">const element = {
+    type: &#x27;div&#x27;,
+    props: {
+        title: &#x27;foo&#x27;,
+        children: &#x27;hello&#x27;
+    }
+}
+</code></pre><p>简单总结一下，<code>React.createElement</code> 实际上是生成了一个 element 对象，该对象拥有以下属性：</p><ul><li>type: 标签名</li><li>props<ul><li>title: 标签属性</li><li>children: 子节点</li></ul></li></ul><h3>1.2 render</h3><p><code>ReactDOM.render()</code> 将 element 添加到 id 为 container 的 DOM 节点中，下面我们将简单手写一个方法代替 <code>ReactDOM.render()</code>。</p><ol><li>创建标签名为 element.type 的节点；</li></ol><pre><code class="language-javascript">const node = document.createElement(element.type)
+</code></pre><ol start="2"><li>设置 node 节点的 title 为 element.props.title；</li></ol><pre><code class="language-javascript">node[&quot;title&quot;] = element.props.title
+</code></pre><ol start="3"><li>创建一个空的文本节点 text；</li></ol><pre><code class="language-javascript">const text = document.createTextNode(&quot;&quot;)
+</code></pre><ol start="4"><li>设置文本节点的 nodeValue 为 element.props.children；</li></ol><pre><code class="language-javascript">text[&quot;nodeValue&quot;] = element.props.children
+</code></pre><ol start="5"><li>将文本节点 text 添加进 node 节点；</li></ol><pre><code class="language-javascript">node.appendChild(text)
+</code></pre><ol start="6"><li>将 node 节点添加进 container 节点</li></ol><pre><code class="language-javascript">container.appendChild(node)
+</code></pre><blockquote><p>本例完整源码见：<a href="https://github.com/jiaozitang/web-learn-note/blob/main/src/%E6%89%8B%E5%86%99%E7%B3%BB%E5%88%97/React/reactDemo2.html">reactDemo2</a></p></blockquote><p>运行源码，结果如下，和引入 React 的结果一致：</p><p><img src="https://p9-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/8033485bbe0a46e6b8f32c5f69315429~tplv-k3u1fbpfcp-watermark.image" alt="image.png"/></p><h1>三、开始</h1><p>上文通过模拟 React，简单代替了 React.createElement、ReactDOM.render 方法，接下来将真正开始实现 React 的各个功能。</p><h2>1. createElement（虚拟 DOM）</h2><p>上面有了解到 createElement 的作用是创建一个 element 对象，结构如下：</p><pre><code class="language-javascript">// 虚拟 DOM 结构
+const element = {
+    type: &#x27;div&#x27;, // 标签名
+    props: { // 节点属性，包含 children
+        title: &#x27;foo&#x27;, // title 属性
+        children: &#x27;hello&#x27; // 子节点，注：实际上这里应该是数组结构，帮助我们存储更多子节点
+    }
+}
+</code></pre><p>根据 element 的结构，设计了 createElement 函数，代码如下：</p><pre><code class="language-javascript">/**
+ * 创建虚拟 DOM 结构
+ * @param {type} 标签名
+ * @param {props} 属性对象
+ * @param {children} 子节点
+ * @return {element} 虚拟 DOM
+ */
+function createElement (type, props, ...children) {
+    return {
+        type,
+        props: {
+            ...props,
+            children: children.map(child =&gt; 
+                typeof child === &#x27;object&#x27;
+                ? child
+                : createTextElement(child)
+            )
+        }
+    }
+}
+</code></pre><p>这里有考虑到，当 children 是非对象时，应该创建一个 textElement 元素， 代码如下：</p><pre><code class="language-javascript">/**
+ * 创建文本节点
+ * @param {text} 文本值
+ * @return {element} 虚拟 DOM
+ */
+function createTextElement (text) {
+    return {
+        type: &quot;TEXT_ELEMENT&quot;,
+        props: {
+            nodeValue: text,
+            children: []
+        }
+    }
+}
+</code></pre><p>接下来试一下，代码如下：</p><pre><code class="language-javascript">const myReact = {
+    createElement
+}
+const element = myReact.createElement(
+  &quot;div&quot;,
+  { id: &quot;foo&quot; },
+  myReact.createElement(&quot;a&quot;, null, &quot;bar&quot;),
+  myReact.createElement(&quot;b&quot;)
+)
+console.log(element)
+</code></pre><blockquote><p>本例完整源码见：<a href="https://github.com/jiaozitang/web-learn-note/blob/main/src/%E6%89%8B%E5%86%99%E7%B3%BB%E5%88%97/React/reactDemo3.html">reactDemo3</a></p></blockquote><p>得到的 element 对象如下：</p><pre><code class="language-javascript">const element = {
+    &quot;type&quot;: &quot;div&quot;, 
+    &quot;props&quot;: {
+        &quot;id&quot;: &quot;foo&quot;, 
+        &quot;children&quot;: [
+            {
+                &quot;type&quot;: &quot;a&quot;, 
+                &quot;props&quot;: {
+                    &quot;children&quot;: [
+                        {
+                            &quot;type&quot;: &quot;TEXT_ELEMENT&quot;, 
+                            &quot;props&quot;: {
+                                &quot;nodeValue&quot;: &quot;bar&quot;, 
+                                &quot;children&quot;: [ ]
+                            }
+                        }
+                    ]
+                }
+            }, 
+            {
+                &quot;type&quot;: &quot;b&quot;, 
+                &quot;props&quot;: {
+                    &quot;children&quot;: [ ]
+                }
+            }
+        ]
+    }
+}
+</code></pre><p><strong>JSX</strong></p><p>实际上我们在使用 react 开发的过程中，并不会这样创建组件：</p><pre><code class="language-javascript">const element = myReact.createElement(
+  &quot;div&quot;,
+  { id: &quot;foo&quot; },
+  myReact.createElement(&quot;a&quot;, null, &quot;bar&quot;),
+  myReact.createElement(&quot;b&quot;)
+)
+</code></pre><p>而是通过 JSX 语法，代码如下：</p><pre><code class="language-javascript">const element = (
+    &lt;div id=&#x27;foo&#x27;&gt;
+        &lt;a&gt;bar&lt;/a&gt;
+        &lt;b&gt;&lt;/b&gt;
+    &lt;/div&gt;
+)
+</code></pre><p>在 myReact 中，可以通过添加注释的形式，告诉 babel 转译我们指定的函数，来使用 JSX 语法，代码如下：</p><pre><code class="language-javascript">/** @jsx myReact.createElement */
+const element = (
+    &lt;div id=&#x27;foo&#x27;&gt;
+        &lt;a&gt;bar&lt;/a&gt;
+        &lt;b&gt;&lt;/b&gt;
+    &lt;/div&gt;
+)
+</code></pre><blockquote><p>本例完整源码见：<a href="https://github.com/jiaozitang/web-learn-note/blob/main/src/%E6%89%8B%E5%86%99%E7%B3%BB%E5%88%97/React/reactDemo4.html">reactDemo4</a></p></blockquote><h2>2. render</h2><p>render 函数帮助我们将 element 添加至真实节点中。</p><p>将分为以下步骤实现：</p><ol><li>创建 element.type 类型的 dom 节点，并添加至容器中；</li></ol><pre><code class="language-javascript">/**
+ * 将虚拟 DOM 添加至真实 DOM
+ * @param {element} 虚拟 DOM
+ * @param {container} 真实 DOM
+ */
+function render (element, container) {
+    const dom = document.createElement(element.type)
+    container.appendChild(dom)
+}
+</code></pre><ol start="2"><li>将 element.children 都添加至 dom 节点中；</li></ol><pre><code class="language-javascript">element.props.children.forEach(child =&gt; 
+    render(child, dom)
+)
+</code></pre><ol start="3"><li>对文本节点进行特殊处理；</li></ol><pre><code class="language-javascript">const dom = element.type === &#x27;TEXT_ELEMENT&#x27;
+    ? document.createTextNode(&quot;&quot;)
+    : document.createElement(element.type)
+</code></pre><ol start="4"><li>将 element 的 props 属性添加至 dom；</li></ol><pre><code class="language-javascript">const isProperty = key =&gt; key !== &quot;children&quot;
+Object.keys(element.props)
+    .filter(isProperty)
+    .forEach(name =&gt; {
+      dom[name] = element.props[name]
+})
+</code></pre><p>以上我们实现了将 JSX 渲染到真实 DOM 的功能，接下来试一下，代码如下：</p><pre><code class="language-javascript">const myReact = {
+    createElement,
+    render
+}
+/** @jsx myReact.createElement */
+const element = (
+    &lt;div id=&#x27;foo&#x27;&gt;
+        &lt;a&gt;bar&lt;/a&gt;
+        &lt;b&gt;&lt;/b&gt;
+    &lt;/div&gt;
+)
+
+myReact.render(element, document.getElementById(&#x27;container&#x27;))
+</code></pre><blockquote><p>本例完整源码见：<a href="https://github.com/jiaozitang/web-learn-note/blob/main/src/%E6%89%8B%E5%86%99%E7%B3%BB%E5%88%97/React/reactDemo5.html">reactDemo5</a></p></blockquote><p>结果如图，成功输出：</p><p><img src="https://p1-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/fe4fe623e02e41d2bd81957c0019f12b~tplv-k3u1fbpfcp-watermark.image" alt="image.png"/></p><h2>3. 可中断渲染（requestIdleCallback）</h2><p>再来看看上面写的 render 方法中关于子节点的处理，代码如下：</p><pre><code class="language-javascript">/**
+ * 将虚拟 DOM 添加至真实 DOM
+ * @param {element} 虚拟 DOM
+ * @param {container} 真实 DOM
+ */
+function render (element, container) {
+    // 省略
+    // 遍历所有子节点，并进行渲染
+    element.props.children.forEach(child =&gt;
+        render(child, dom)
+    )
+    // 省略
+}
+</code></pre><p>这个递归调用是有问题的，一旦开始渲染，就会将所有节点及其子节点全部渲染完成这个进程才会结束。</p><p>当 dom tree 很大的情况下，在渲染过程中，页面上是卡住的状态，无法进行用户输入等交互操作。</p><p>可分为以下步骤解决上述问题：</p><ol><li>允许中断渲染工作，如果有优先级更高的工作插入，则暂时中断浏览器渲染，待完成该工作后，恢复浏览器渲染；</li><li>将渲染工作进行分解，分解成一个个小单元；</li></ol><p>使用 requestIdleCallback 来解决允许中断渲染工作的问题。</p><p><a href="https://developer.mozilla.org/zh-CN/docs/Web/API/Window/requestIdleCallback">window.requestIdleCallback</a> 将在浏览器的空闲时段内调用的函数排队。这使开发者能够在主事件循环上执行后台和低优先级工作，而不会影响延迟关键事件，如动画和输入响应。</p><blockquote><p>window.requestIdleCallback 详细介绍可查看文档：<a href="https://developer.mozilla.org/zh-CN/docs/Web/API/Window/requestIdleCallback">文档</a></p></blockquote><p>代码如下：</p><pre><code class="language-javascript">// 下一个工作单元
+let nextUnitOfWork = null
+/**
+ * workLoop 工作循环函数
+ * @param {deadline} 截止时间
+ */
+function workLoop(deadline) {
+  // 是否应该停止工作循环函数
+  let shouldYield = false
+  
+  // 如果存在下一个工作单元，且没有优先级更高的其他工作时，循环执行
+  while (nextUnitOfWork &amp;&amp; !shouldYield) {
+    nextUnitOfWork = performUnitOfWork(
+      nextUnitOfWork
+    )
+    
+    // 如果截止时间快到了，停止工作循环函数
+    shouldYield = deadline.timeRemaining() &lt; 1
+  }
+  
+  // 通知浏览器，空闲时间应该执行 workLoop
+  requestIdleCallback(workLoop)
+}
+// 通知浏览器，空闲时间应该执行 workLoop
+requestIdleCallback(workLoop)
+
+// 执行单元事件，并返回下一个单元事件
+function performUnitOfWork(nextUnitOfWork) {
+  // TODO
+}
+</code></pre><p>performUnitOfWork 是用来执行单元事件，并返回下一个单元事件的，具体实现将在下文介绍。</p><h2>4. Fiber</h2><p>上文介绍了通过 requestIdleCallback 让浏览器在空闲时间渲染工作单元，避免渲染过久导致页面卡顿的问题。</p><blockquote><p>注：实际上 requestIdleCallback 功能并不稳定，不建议用于生产环境，本例仅用于模拟 React 的思路，React 本身并不是通过 requestIdleCallback 来实现让浏览器在空闲时间渲染工作单元的。</p></blockquote><p>另一方面，为了让渲染工作可以分离成一个个小单元，React 设计了 fiber。</p><p>每一个 element 都是一个 fiber 结构，每一个 fiber 都是一个渲染工作单元。</p><p>所以 <strong>fiber 既是一种数据结构，也是一个工作单元</strong>。</p><p>下文将通过简单的示例对 fiber 进行介绍。</p><p>假设需要渲染这样一个 element 树：</p><pre><code class="language-javascript">myReact.render(
+  &lt;div&gt;
+    &lt;h1&gt;
+      &lt;p /&gt;
+      &lt;a /&gt;
+    &lt;/h1&gt;
+    &lt;h2 /&gt;
+  &lt;/div&gt;,
+  container
+)
+</code></pre><p>生成的 fiber tree 如图：</p><p>橙色代表子节点，黄色代表父节点，蓝色代表兄弟节点。</p><p><img src="https://p1-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/a92a6b184ca4456aab76a73cff2ca4a3~tplv-k3u1fbpfcp-watermark.image" alt="image.png"/></p><p>每个 fiber 都有一个链接指向它的第一个子节点、下一个兄弟节点和它的父节点。这种数据结构可以让我们更方便的查找下一个工作单元。</p><p>上图的箭头也表明了 fiber 的渲染过程，渲染过程详细描述如下：</p><ol><li>从 root 开始，找到第一个子节点 div；</li><li>找到 div 的第一个子节点 h1；</li><li>找到 h1 的第一个子节点 p；</li><li>找 p 的第一个子节点，<strong>如无子节点，则找下一个兄弟节点</strong>，找到 p 的兄弟节点 a；</li><li>找 a 的第一个子节点，<strong>如无子节点，也无兄弟节点，则找它的父节点的下一个兄弟节点</strong>，找到 a 的 父节点的兄弟节点 h2；</li><li>找 h2 的第一个子节点，找不到，找兄弟节点，找不到，找父节点 div 的兄弟节点，也找不到，继续找 div 的父节点的兄弟节点，找到 root；</li><li>第 6 步已经找到了 root 节点，渲染已全部完成。</li></ol><p>下面将渲染过程用代码实现。</p><ol><li>将 render 中创建 DOM 节点的部分抽离为 creactDOM 函数；</li></ol><pre><code class="language-javascript">/**
+ * createDom 创建 DOM 节点
+ * @param {fiber} fiber 节点
+ * @return {dom} dom 节点
+ */
+function createDom (fiber) {
+    // 如果是文本类型，创建空的文本节点，如果不是文本类型，按 type 类型创建节点
+    const dom = fiber.type === &#x27;TEXT_ELEMENT&#x27;
+        ? document.createTextNode(&quot;&quot;)
+        : document.createElement(fiber.type)
+
+    // isProperty 表示不是 children 的属性
+    const isProperty = key =&gt; key !== &quot;children&quot;
+    
+    // 遍历 props，为 dom 添加属性
+    Object.keys(fiber.props)
+        .filter(isProperty)
+        .forEach(name =&gt; {
+            dom[name] = fiber.props[name]
+        })
+        
+    // 返回 dom
+    return dom
+}
+</code></pre><ol start="2"><li>在 render 中设置第一个工作单元为 fiber 根节点；</li></ol><p>fiber 根节点仅包含 children 属性，值为参数 fiber。</p><pre><code class="language-javascript">// 下一个工作单元
+let nextUnitOfWork = null
+/**
+ * 将 fiber 添加至真实 DOM
+ * @param {element} fiber
+ * @param {container} 真实 DOM
+ */
+function render (element, container) {
+    nextUnitOfWork = {
+        dom: container,
+        props: {
+            children: [element]
+        }
+    }
+}
+</code></pre><ol start="3"><li>通过 requestIdleCallback 在浏览器空闲时，渲染 fiber；</li></ol><pre><code class="language-javascript">/**
+ * workLoop 工作循环函数
+ * @param {deadline} 截止时间
+ */
+function workLoop(deadline) {
+  // 是否应该停止工作循环函数
+  let shouldYield = false
+  
+  // 如果存在下一个工作单元，且没有优先级更高的其他工作时，循环执行
+  while (nextUnitOfWork &amp;&amp; !shouldYield) {
+    nextUnitOfWork = performUnitOfWork(
+      nextUnitOfWork
+    )
+    
+    // 如果截止时间快到了，停止工作循环函数
+    shouldYield = deadline.timeRemaining() &lt; 1
+  }
+  
+  // 通知浏览器，空闲时间应该执行 workLoop
+  requestIdleCallback(workLoop)
+}
+// 通知浏览器，空闲时间应该执行 workLoop
+requestIdleCallback(workLoop)
+</code></pre><ol start="4"><li>渲染 fiber 的函数 performUnitOfWork；</li></ol><pre><code class="language-javascript">/**
+ * performUnitOfWork 处理工作单元
+ * @param {fiber} fiber
+ * @return {nextUnitOfWork} 下一个工作单元
+ */
+function performUnitOfWork(fiber) {
+  // TODO 添加 dom 节点
+  // TODO 新建 filber
+  // TODO 返回下一个工作单元（fiber）
+}
+</code></pre><p>4.1 添加 dom 节点</p><pre><code class="language-javascript">function performUnitOfWork(fiber) {
+    // 如果 fiber 没有 dom 节点，为它创建一个 dom 节点
+    if (!fiber.dom) {
+        fiber.dom = createDom(fiber)
+    }
+
+    // 如果 fiber 有父节点，将 fiber.dom 添加至父节点
+    if (fiber.parent) {
+        fiber.parent.dom.appendChild(fiber.dom)
+    }
+}
+</code></pre><p>4.2 新建 filber</p><pre><code class="language-javascript">function performUnitOfWork(fiber) {
+    // ～～省略～～
+    // 子节点
+    const elements = fiber.props.children
+    // 索引
+    let index = 0
+    // 上一个兄弟节点
+    let prevSibling = null
+    // 遍历子节点
+    while (index &lt; elements.length) {
+        const element = elements[index]
+
+        // 创建 fiber
+        const newFiber = {
+            type: element.type,
+            props: element.props,
+            parent: fiber,
+            dom: null,
+        }
+
+        // 将第一个子节点设置为 fiber 的子节点
+        if (index === 0) {
+            fiber.child = newFiber
+        } else if (element) {
+        // 第一个之外的子节点设置为该节点的兄弟节点
+            prevSibling.sibling = newFiber
+        }
+
+        prevSibling = newFiber
+        index++
+    }
+}
+</code></pre><p>4.3 返回下一个工作单元（fiber）</p><pre><code class="language-javascript">
+function performUnitOfWork(fiber) {
+    // ～～省略～～
+    // 如果有子节点，返回子节点
+    if (fiber.child) {
+        return fiber.child
+    }
+    let nextFiber = fiber
+    while (nextFiber) {
+        // 如果有兄弟节点，返回兄弟节点
+        if (nextFiber.sibling) {
+            return nextFiber.sibling
+        }
+
+        // 否则继续走 while 循环，直到找到 root。
+        nextFiber = nextFiber.parent
+    }
+}
+</code></pre><p>以上我们实现了将 fiber 渲染到页面的功能，且渲染过程是可中断的。</p><p>现在试一下，代码如下：</p><pre><code class="language-javascript">const element = (
+    &lt;div&gt;
+        &lt;h1&gt;
+        &lt;p /&gt;
+        &lt;a /&gt;
+        &lt;/h1&gt;
+        &lt;h2 /&gt;
+    &lt;/div&gt;
+)
+
+myReact.render(element, document.getElementById(&#x27;container&#x27;))
+</code></pre><blockquote><p>本例完整源码见：<a href="https://github.com/jiaozitang/web-learn-note/blob/main/src/%E6%89%8B%E5%86%99%E7%B3%BB%E5%88%97/React/reactDemo7.html">reactDemo7</a></p></blockquote><p>如预期输出 dom，如图：</p><p><img src="https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/18c3cea8e3b042ebbf2f10eaffd9a18b~tplv-k3u1fbpfcp-watermark.image" alt="image.png"/></p><h2>5. 渲染提交阶段</h2><p>由于渲染过程被我们做了可中断的，那么中断的时候，我们肯定不希望浏览器给用户展示的是渲染了一半的 UI。</p><p>对渲染提交阶段优化的处理如下：</p><ol><li>把 performUnitOfWork 中关于把子节点添加至父节点的逻辑删除；</li></ol><pre><code class="language-javascript">function performUnitOfWork(fiber) {
+    // 把这段删了
+    if (fiber.parent) {
+       fiber.parent.dom.appendChild(fiber.dom)
+    }
+}
+</code></pre><ol start="2"><li>新增一个根节点变量，存储 fiber 根节点；</li></ol><pre><code class="language-javascript">// 根节点
+let wipRoot = null
+function render (element, container) {
+    wipRoot = {
+        dom: container,
+        props: {
+            children: [element]
+        }
+    }
+    // 下一个工作单元是根节点
+    nextUnitOfWork = wipRoot
+}
+</code></pre><ol start="3"><li>当所有 fiber 都工作完成时，nextUnitOfWork 为 undefined，这时再渲染真实 DOM；</li></ol><pre><code class="language-javascript">function workLoop (deadline) {
+    // 省略
+    if (!nextUnitOfWork &amp;&amp; wipRoot) {
+        commitRoot()
+    }
+    // 省略
+}
+</code></pre><ol start="4"><li>新增 commitRoot 函数，执行渲染真实 DOM 操作，递归将 fiber tree 渲染为真实 DOM；</li></ol><pre><code class="language-javascript">// 全部工作单元完成后，将 fiber tree 渲染为真实 DOM；
+function commitRoot () {
+    commitWork(wipRoot.child)
+    // 需要设置为 null，否则 workLoop 在浏览器空闲时不断的执行。
+    wipRoot = null
+}
+/**
+ * performUnitOfWork 处理工作单元
+ * @param {fiber} fiber
+ */
+function commitWork (fiber) {
+    if (!fiber) return
+    const domParent = fiber.parent.dom
+    domParent.appendChild(fiber.dom)
+    // 渲染子节点
+    commitWork(fiber.child)
+    // 渲染兄弟节点
+    commitWork(fiber.sibling)
+}
+</code></pre><blockquote><p>本例完整源码见：<a href="https://github.com/jiaozitang/web-learn-note/blob/main/src/%E6%89%8B%E5%86%99%E7%B3%BB%E5%88%97/React/reactDemo8.html">reactDemo8</a></p></blockquote><p>源码运行结果如图：</p><p><img src="https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/cccbab6b83a24ca3a9c45470ff9b37a0~tplv-k3u1fbpfcp-watermark.image" alt="image.png"/></p><h2>6. 协调（diff 算法）</h2><p>当 element 有更新时，需要将更新前的 fiber tree 和更新后的 fiber tree 进行比较，得到比较结果后，仅对有变化的 fiber 对应的 dom 节点进行更新。</p><p>通过协调，减少对真实 DOM 的操作次数。</p><h3>1. currentRoot</h3><p>新增 currentRoot 变量，保存根节点更新前的 fiber tree，为 fiber 新增 alternate 属性，保存 fiber 更新前的 fiber tree；</p><pre><code class="language-javascript">let currentRoot = null
+function render (element, container) {
+    wipRoot = {
+        // 省略
+        alternate: currentRoot
+    }
+}
+function commitRoot () {
+    commitWork(wipRoot.child)
+    currentRoot = wipRoot
+    wipRoot = null
+}
+</code></pre><h3>2. performUnitOfWork</h3><p>将 performUnitOfWork 中关于新建 fiber 的逻辑，抽离到 reconcileChildren 函数；</p><pre><code class="language-javascript">/**
+ * 协调子节点
+ * @param {fiber} fiber
+ * @param {elements} fiber 的 子节点
+ */
+function reconcileChildren (fiber, elements) {
+    // 用于统计子节点的索引值
+    let index = 0
+    // 上一个兄弟节点
+    let prevSibling = null
+
+    // 遍历子节点
+    while (index &lt; elements.length) {
+        const element = elements[index]
+
+        // 新建 fiber
+        const newFiber = {
+            type: element.type,
+            props: element.props,
+            parent: fiber,
+            dom: null,
+        }
+
+        // fiber的第一个子节点是它的子节点
+        if (index === 0) {
+            fiber.child = newFiber
+        } else if (element) {
+        // fiber 的其他子节点，是它第一个子节点的兄弟节点
+            prevSibling.sibling = newFiber
+        }
+
+        // 把新建的 newFiber 赋值给 prevSibling，这样就方便为 newFiber 添加兄弟节点了
+        prevSibling = newFiber
+        
+        // 索引值 + 1
+        index++
+    }
+}
+</code></pre><h3>3. reconcileChildren</h3><p>在 reconcileChildren 中对比新旧 fiber；</p><h4>3.1 当新旧 fiber 类型相同时</h4><p>保留 dom，仅更新 props，设置 effectTag 为 UPDATE；</p><pre><code class="language-javascript">function reconcileChildren (wipFiber, elements) {
+    // ～～省略～～
+    // oldFiber 可以在 wipFiber.alternate 中找到
+    let oldFiber = wipFiber.alternate &amp;&amp; wipFiber.alternate.child
+
+    while (index &lt; elements.length || oldFiber != null) {
+        const element = elements[index]
+        let newFiber = null
+
+        // fiber 类型是否相同
+        const sameType =
+            oldFiber &amp;&amp;
+            element &amp;&amp;
+            element.type == oldFiber.type
+
+        // 如果类型相同，仅更新 props
+        if (sameType) {
+            newFiber = {
+                type: oldFiber.type,
+                props: element.props,
+                dom: oldFiber.dom,
+                parent: wipFiber,
+                alternate: oldFiber,
+                effectTag: &quot;UPDATE&quot;,
+            }
+        }
+        // ～～省略～～
+    }
+    // ～～省略～～
+}
+</code></pre><h4>3.2 当新旧 fiber 类型不同，且有新元素时</h4><p>创建一个新的 dom 节点，设置 effectTag 为 PLACEMENT；</p><pre><code class="language-javascript">function reconcileChildren (wipFiber, elements) {
+    // ～～省略～～
+    if (element &amp;&amp; !sameType) {
+        newFiber = {
+            type: element.type,
+            props: element.props,
+            dom: null,
+            parent: wipFiber,
+            alternate: null,
+            effectTag: &quot;PLACEMENT&quot;,
+        }
+    }
+    // ～～省略～～
+}
+</code></pre><h4>3.3 当新旧 fiber 类型不同，且有旧 fiber 时</h4><p>删除旧 fiber，设置 effectTag 为 DELETION；</p><pre><code class="language-javascript">function reconcileChildren (wipFiber, elements) {
+    // ～～省略～～
+    if (oldFiber &amp;&amp; !sameType) {
+        oldFiber.effectTag = &quot;DELETION&quot;
+        deletions.push(oldFiber)
+    }
+    // ～～省略～～
+}
+</code></pre><h3>4. deletions</h3><p>新建 deletions 数组存储需删除的 fiber 节点，渲染 DOM 时，遍历 deletions 删除旧 fiber；</p><pre><code class="language-javascript">let deletions = null
+function render (element, container) {
+    // 省略
+    // render 时，初始化 deletions 数组
+    deletions = []
+}
+
+// 渲染 DOM 时，遍历 deletions 删除旧 fiber
+function commitRoot () {
+    deletions.forEach(commitWork)
+}
+</code></pre><h3>5. commitWork</h3><p>在 commitWork 中对 fiber 的 effectTag 进行判断，并分别处理。</p><h4>5.1 PLACEMENT</h4><p>当 fiber 的 effectTag 为 PLACEMENT 时，表示是新增 fiber，将该节点新增至父节点中。</p><pre><code class="language-javascript">if (
+    fiber.effectTag === &quot;PLACEMENT&quot; &amp;&amp;
+    fiber.dom != null
+) {
+    domParent.appendChild(fiber.dom)
+}
+</code></pre><h4>5.2 DELETION</h4><p>当 fiber 的 effectTag 为 DELETION 时，表示是删除 fiber，将父节点的该节点删除。</p><pre><code class="language-javascript">else if (fiber.effectTag === &quot;DELETION&quot;) {
+    domParent.removeChild(fiber.dom)
+}
+</code></pre><h4>5.3 UPDATE</h4><p>当 fiber 的 effectTag 为 UPDATE 时，表示是更新 fiber，更新 props 属性。</p><pre><code class="language-javascript">else if (fiber.effectTag === &#x27;UPDATE&#x27; &amp;&amp; fiber.dom != null) {
+    updateDom(fiber.dom, fiber.alternate.props, fiber.props)
+}
+</code></pre><p>updateDom 函数根据不同的更新类型，对 props 属性进行更新。</p><pre><code class="language-javascript">const isProperty = key =&gt; key !== &quot;children&quot;
+
+// 是否是新属性
+const isNew = (prev, next) =&gt; key =&gt; prev[key] !== next[key]
+
+// 是否是旧属性
+const isGone = (prev, next) =&gt; key =&gt; !(key in next)
+
+function updateDom(dom, prevProps, nextProps) {
+    // 删除旧属性
+    Object.keys(prevProps)
+        .filter(isProperty)
+        .filter(isGone(prevProps, nextProps))
+        .forEach(name =&gt; {
+            dom[name] = &quot;&quot;
+        })
+
+    // 更新新属性
+    Object.keys(nextProps)
+        .filter(isProperty)
+        .filter(isNew(prevProps, nextProps))
+        .forEach(name =&gt; {
+            dom[name] = nextProps[name]
+        })
+}
+</code></pre><p>另外，为 updateDom 添加事件属性的更新、删除，便于追踪 fiber 事件的更新。</p><pre><code class="language-javascript">function updateDom(dom, prevProps, nextProps) {
+    // ～～省略～～
+    const isEvent = key =&gt; key.startsWith(&quot;on&quot;)
+    //删除旧的或者有变化的事件
+    Object.keys(prevProps)
+        .filter(isEvent)
+        .filter(
+          key =&gt;
+            !(key in nextProps) ||
+            isNew(prevProps, nextProps)(key)
+        )
+        .forEach(name =&gt; {
+          const eventType = name
+            .toLowerCase()
+            .substring(2)
+          dom.removeEventListener(
+            eventType,
+            prevProps[name]
+          )
+        })
+
+    // 注册新事件
+    Object.keys(nextProps)
+        .filter(isEvent)
+        .filter(isNew(prevProps, nextProps))
+        .forEach(name =&gt; {
+        const eventType = name
+            .toLowerCase()
+            .substring(2)
+        dom.addEventListener(
+            eventType,
+            nextProps[name]
+        )
+    })
+    // ～～省略～～
+}
+</code></pre><p>替换 creactDOM 中设置 props 的逻辑。</p><pre><code class="language-javascript">function createDom (fiber) {
+    const dom = fiber.type === &#x27;TEXT_ELEMENT&#x27;
+        ? document.createTextNode(&quot;&quot;)
+        : document.createElement(fiber.type)
+    // 看这里鸭
+    updateDom(dom, {}, fiber.props)
+    return dom
+}
+</code></pre><p>新建一个包含输入表单项的例子，尝试更新 element，代码如下：</p><pre><code class="language-javascript">/** @jsx myReact.createElement */
+const container = document.getElementById(&quot;container&quot;)
+
+const updateValue = e =&gt; {
+    rerender(e.target.value)
+}
+
+const rerender = value =&gt; {
+    const element = (
+        &lt;div&gt;
+            &lt;input onInput={updateValue} value={value} /&gt;
+            &lt;h2&gt;Hello {value}&lt;/h2&gt;
+        &lt;/div&gt;
+    )
+    myReact.render(element, container)
+}
+
+rerender(&quot;World&quot;)
+</code></pre><blockquote><p>本例完整源码见：<a href="https://github.com/jiaozitang/web-learn-note/blob/main/src/%E6%89%8B%E5%86%99%E7%B3%BB%E5%88%97/React/reactDemo9.html">reactDemo9</a></p></blockquote><p>输出结果如图：</p><p><img src="https://p9-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/e615196850b244c3930771375d93ba3c~tplv-k3u1fbpfcp-watermark.image" alt="12.gif"/></p><h2>7. 函数式组件</h2><p>先来看一个简单的函数式组件示例：</p><blockquote><p>myReact 还不支持函数式组件，下面代码运行会报错，这里仅用于比照函数式组件的常规使用方式。</p></blockquote><pre><code class="language-javascript">/** @jsx myReact.createElement */
+const container = document.getElementById(&quot;container&quot;)
+
+function App (props) {
+    return (
+        &lt;h1&gt;hi~ {props.name}&lt;/h1&gt;
+    )
+}
+
+const element = (
+    &lt;App name=&#x27;foo&#x27; /&gt;
+)
+
+myReact.render(element, container)
+</code></pre><p>函数式组件和 html 标签组件相比，有以下两点不同：</p><ul><li>函数组件的 fiber 没有 dom 节点；</li><li>函数组件的 children 需要运行函数后得到；</li></ul><p>通过下列步骤实现函数组件：</p><ol><li>修改 performUnitOfWork，根据 fiber 类型，执行 fiber 工作单元；</li></ol><pre><code class="language-javascript">function performUnitOfWork(fiber) {
+    // 是否是函数类型组件
+    const isFunctionComponent = fiber &amp;&amp; fiber.type &amp;&amp; fiber.type instanceof Function
+    // 如果是函数组件，执行 updateFunctionComponent 函数
+    if (isFunctionComponent) {
+        updateFunctionComponent(fiber)
+    } else {
+    // 如果不是函数组件，执行 updateHostComponent 函数
+        updateHostComponent(fiber)
+    }
+    // 省略
+}
+</code></pre><ol start="2"><li>定义 updateHostComponent 函数，执行非函数组件；</li></ol><p>非函数式组件可直接将 fiber.props.children 作为参数传递。</p><pre><code class="language-javascript">function updateHostComponent(fiber) {
+    if (!fiber.dom) {
+        fiber.dom = createDom(fiber)
+    }
+    reconcileChildren(fiber, fiber.props.children)
+}
+</code></pre><ol start="3"><li>定义 updateFunctionComponent 函数，执行函数组件；</li></ol><p>函数组件需要运行来获得 fiber.children。</p><pre><code class="language-javascript">function updateFunctionComponent(fiber) {
+    // fiber.type 就是函数组件本身，fiber.props 就是函数组件的参数
+    const children = [fiber.type(fiber.props)]
+    reconcileChildren(fiber, children)
+}
+</code></pre><ol start="4"><li>修改 commitWork 函数，兼容没有 dom 节点的 fiber；</li></ol><p>4.1 修改 domParent 的获取逻辑，通过 while 循环不断向上寻找，直到找到有 dom 节点的父 fiber；</p><pre><code class="language-javascript">function commitWork (fiber) {
+    // 省略
+    let domParentFiber = fiber.parent
+    // 如果 fiber.parent 没有 dom 节点，则继续找 fiber.parent.parent.dom，直到有 dom 节点。
+    while (!domParentFiber.dom) {
+        domParentFiber = domParentFiber.parent
+    }
+    const domParent = domParentFiber.dom
+    // 省略
+}
+</code></pre><p>4.2 修改删除节点的逻辑，当删除节点时，需要不断向下寻找，直到找到有 dom 节点的子 fiber；</p><pre><code class="language-javascript">function commitWork (fiber) {
+    // 省略
+    // 如果 fiber 的更新类型是删除，执行 commitDeletion
+     else if (fiber.effectTag === &quot;DELETION&quot;) {
+        commitDeletion(fiber.dom, domParent)
+    }
+    // 省略
+}
+
+// 删除节点
+function commitDeletion (fiber, domParent) {
+    // 如果该 fiber 有 dom 节点，直接删除
+    if (fiber.dom) {
+        domParent.removeChild(fiber.dom)
+    } else {
+    // 如果该 fiber 没有 dom 节点，则继续找它的子节点进行删除
+        commitDeletion(fiber.child, domParent)
+    }
+}
+</code></pre><p>下面试一下上面的例子，代码如下：</p><pre><code class="language-javascript">/** @jsx myReact.createElement */
+const container = document.getElementById(&quot;container&quot;)
+
+function App (props) {
+    return (
+        &lt;h1&gt;hi~ {props.name}&lt;/h1&gt;
+    )
+}
+
+const element = (
+    &lt;App name=&#x27;foo&#x27; /&gt;
+)
+
+myReact.render(element, container)
+</code></pre><blockquote><p>本例完整源码见：<a href="https://github.com/jiaozitang/web-learn-note/blob/main/src/%E6%89%8B%E5%86%99%E7%B3%BB%E5%88%97/React/reactDemo10.html">reactDemo10</a></p></blockquote><p>运行结果如图：</p><p><img src="https://p9-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/a920eb5c41974c15b2db269dc95cb7f9~tplv-k3u1fbpfcp-watermark.image" alt="image.png"/></p><h2>8. hooks</h2><p>下面继续为 myReact 添加管理状态的功能，期望是函数组件拥有自己的状态，且可以获取、更新状态。</p><p>一个拥有计数功能的函数组件如下：</p><pre><code class="language-javascript">function Counter() {
+    const [state, setState] = myReact.useState(1)
+    return (
+        &lt;h1 onClick={() =&gt; setState(c =&gt; c + 1)}&gt;
+        Count: {state}
+        &lt;/h1&gt;
+    )
+}
+const element = &lt;Counter /&gt;
+</code></pre><p>已知需要一个 useState 方法用来获取、更新状态。</p><p>这里再重申一下，<strong>渲染函数组件的前提是，执行该函数组件</strong>，因此，上述 Counter 想要更新计数，就会在每次更新都执行一次 Counter 函数。</p><p>通过以下步骤实现：</p><ol><li>新增全局变量 wipFiber；</li></ol><pre><code class="language-javascript">// 当前工作单元 fiber
+let wipFiber = null
+function updateFunctionComponent(fiber) {
+    wipFiber = fiber
+    // 当前工作单元 fiber 的 hook
+    wipFiber.hook = []
+    // 省略
+}
+</code></pre><ol start="2"><li>新增 useState 函数；</li></ol><pre><code class="language-javascript">// initial 表示初始参数，在本例中，initial=1
+function useState (initial) {
+    // 是否有旧钩子，旧钩子存储了上一次更新的 hook
+    const oldHook =
+        wipFiber.alternate &amp;&amp;
+        wipFiber.alternate.hook
+
+    // 初始化钩子，钩子的状态是旧钩子的状态或者初始状态
+    const hook = {
+        state: oldHook ? oldHook.state : initial,
+        queue: [],
+    }
+
+    // 从旧的钩子队列中获取所有动作，然后将它们一一应用到新的钩子状态
+    const actions = oldHook ? oldHook.queue : []
+    actions.forEach(action =&gt; {
+        hook.state = action(hook.state)
+    })
+
+    // 设置钩子状态
+    const setState = action =&gt; {
+        // 将动作添加至钩子队列
+        hook.queue.push(action)
+        // 更新渲染
+        wipRoot = {
+            dom: currentRoot.dom,
+            props: currentRoot.props,
+            alternate: currentRoot,
+        }
+        nextUnitOfWork = wipRoot
+        deletions = []
+    }
+
+    // 把钩子添加至工作单元
+    wipFiber.hook = hook
+    
+    // 返回钩子的状态和设置钩子的函数
+    return [hook.state, setState]
+}
+</code></pre><p>下面运行一下计数组件，代码如下：</p><pre><code class="language-javascript">function Counter() {
+    const [state, setState] = myReact.useState(1)
+    return (
+        &lt;h1 onClick={() =&gt; setState(c =&gt; c + 1)}&gt;
+        Count: {state}
+        &lt;/h1&gt;
+    )
+}
+const element = &lt;Counter /&gt;
+</code></pre><blockquote><p>本例完整源码见：<a href="https://github.com/jiaozitang/web-learn-note/blob/main/src/%E6%89%8B%E5%86%99%E7%B3%BB%E5%88%97/React/reactDemo11.html">reactDemo11</a></p></blockquote><p>运行结果如图：
+<img src="https://p6-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/2940b3bb0bb34940891cc1903067b2b3~tplv-k3u1fbpfcp-watermark.image" alt="123.gif"/></p><p>本章节简单实现了 myReact 的 hooks 功能。</p><p>撒花完结，react 还有很多实现值得我们去学习和研究，希望有下期，和大家一起手写 react 的更多功能。</p><h1>总结</h1><p>本文参考 <a href="https://pomb.us/build-your-own-react/">pomb.us</a> 进行学习，实现了包括虚拟 DOM、Fiber、Diff 算法、函数式组件、hooks 等功能的自定义 React。</p><p>在实现过程中小编对 React 的基本术语及实现思路有了大概的掌握，<a href="https://pomb.us/build-your-own-react/">pomb.us</a> 是非常适合初学者的学习资料，可以直接通过 <a href="https://pomb.us/build-your-own-react/">pomb.us</a> 进行学习，也推荐跟着本文一步步实现 React 的常见功能。</p><p>本文源码： <a href="https://github.com/jiaozitang/web-learn-note/tree/main/src/%E6%89%8B%E5%86%99%E7%B3%BB%E5%88%97/Promise">github源码</a> 。</p><p>建议跟着一步步敲，进行实操练习。</p><p>希望能对你有所帮助，感谢阅读～</p><p>别忘了点个赞鼓励一下我哦，笔芯❤️</p><h1>参考资料</h1><ul><li><p><a href="https://pomb.us/build-your-own-react/">https://pomb.us/build-your-own-react/</a></p></li><li><p><a href="https://www.bilibili.com/video/BV1Ki4y1u7Vr?t=78z">卡颂-b站-React源码，你在第几层</a> </p></li><li><p><a href="https://jelly.jd.com/article/60aceb6b27393b0169c85231">手写一个简单的 React</a></p></li></ul>]]></content:encoded>
+        </item>
+    </channel>
+</rss>
