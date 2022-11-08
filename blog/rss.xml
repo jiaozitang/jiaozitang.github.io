@@ -26,9 +26,9 @@ npm init -y
 mkdir my-project-b
 cd ./my-project-b
 npm init -y
-</code></pre><p>启动 pnpm 的 workspace 功能，根目录新增 pnpm-workspace.yaml，指定工作空间的目录：</p><pre><code class="language-yaml">packages:
+</code></pre><p>项目结构如下：</p><p><img src="https://p9-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/54a1debe910e4142847a6800271f8b66~tplv-k3u1fbpfcp-watermark.image?" alt="image.png"/></p><p>启动 pnpm 的 workspace 功能，根目录新增 pnpm-workspace.yaml，指定工作空间的目录：</p><pre><code class="language-yaml">packages:
   - &quot;packages/**&quot;
-</code></pre><p>项目结构如下：</p><p><img src="https://p9-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/54a1debe910e4142847a6800271f8b66~tplv-k3u1fbpfcp-watermark.image?" alt="image.png"/></p><p>当我们配置了指定工作空间的目录后，<strong>packages 里的包互相引用时，会自动依赖本地编译的路径，方便实时调试</strong>。</p><p>至此我们就解决了 Monorepre 项目的管理包与包之间的依赖关系的问题。</p><h3>安装项目内依赖</h3><p>限制仅允许 pnpm 安装依赖，更新 package.json：</p><pre><code class="language-json">{
+</code></pre><p>当我们配置了指定工作空间的目录后，<strong>packages 里的包互相引用时，会自动依赖本地编译的路径，方便实时调试</strong>。</p><p>至此我们就解决了 Monorepre 项目的管理包与包之间的依赖关系的问题。</p><h3>安装项目内依赖</h3><p>限制仅允许 pnpm 安装依赖，更新 package.json：</p><pre><code class="language-json">{
   &quot;scripts&quot;: {
     &quot;preinstall&quot;: &quot;npx only-allow pnpm&quot;
   }
